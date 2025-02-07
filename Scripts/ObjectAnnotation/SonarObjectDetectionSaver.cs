@@ -22,6 +22,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Marus.CustomInspector;
+using System.Globalization;
 
 
 namespace Marus.ObjectAnnotation
@@ -95,6 +96,7 @@ namespace Marus.ObjectAnnotation
         private string _imagesPath;
         private string _labelsPath;
         private List<Tuple<int, string>> _ratios;
+        NumberFormatInfo nfi;
 
         Sonar3D sonar;
         float _lastSave = 0;
@@ -122,6 +124,9 @@ namespace Marus.ObjectAnnotation
             int classIdx = 1;
 
             _classList = new List<(int, string)>();
+
+            nfi = new NumberFormatInfo();
+            nfi.NumberDecimalSeparator = ".";
 
             // initialize collider id dictionary
             foreach (var cls in ObjectClasses)
@@ -172,9 +177,9 @@ namespace Marus.ObjectAnnotation
                 xMin = int.MaxValue;
                 yMin  = int.MaxValue;
                 bool found = false;
-                for (int x = 0; x < classImage.height; x++)
+                for (int x = 0; x < classImage.width; x++)
                 {
-                    for (int y = 0; y < classImage.width; y++)
+                    for (int y = 0; y < classImage.height; y++)
                     {
                         var pix = classImage.GetPixel(x, y);
                         if ((int) (pix.r * 255f) == value.Item1 && (int) (pix.g * 255f) == value.Item2 && pix.b >= IntensityThreshold && pix.b < 1f)
@@ -207,7 +212,7 @@ namespace Marus.ObjectAnnotation
                     float height = _height / (float) sonar.CartesianYRes;
                     using (StreamWriter sw = File.AppendText(_lbl_path))
                     {
-                        sw.WriteLine($"{value.Item1} {x_center} {y_center} {width} {height}");
+                        sw.WriteLine($"{value.Item1} {x_center.ToString(nfi)} {y_center.ToString(nfi)} {width.ToString(nfi)} {height.ToString(nfi)}");
                     }
                 }
             }
@@ -218,8 +223,6 @@ namespace Marus.ObjectAnnotation
                 var path = Path.Combine(_imagesPath, subfolderIdx.Item1, subfolderIdx.Item2 + ".png");
                 File.WriteAllBytes(path, bytes);
             }
-
-
         }
 
         private (string,string) GetSubfolderAndIndex()
