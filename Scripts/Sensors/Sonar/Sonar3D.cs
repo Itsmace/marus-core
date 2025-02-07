@@ -22,8 +22,11 @@ using Marus.Sensors;
 using Marus.Sensors.Core;
 using Marus.Visualization;
 using Unity.Collections;
+using System.Threading;
+using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.UI;
+using Sensorstreaming;
 using Marus.CustomInspector;
 using Marus.ObjectAnnotation;
 
@@ -51,7 +54,7 @@ namespace Marus.Sensors
         /// <summary>
         /// Sonar output gain
         /// </summary>
-        public float RayIntensity = 10;
+        public float RayIntensity = 50;
 
         /// <summary>
         /// Maximum sonar range in meters
@@ -99,19 +102,39 @@ namespace Marus.Sensors
         public RayDistribution sonarRayDistribution;
 
         /// <summary>
+        /// Saved configuration presets for replicating common sonar models 
+        /// Custom - configuration settings set in the inspector editor
+        /// </summary>
+        public enum SonarConfiguration { Custom, TritechGemini1200ik, ArisExplorer3000 }
+        public SonarConfiguration sonarConfig;
+
+        /// <summary>
         /// Optional saving of generated polar and cartesian images. 
-        /// If enabled, images saved in project_folder/SaveImages/
+        /// If enabled, images saved in project_folder/SaveImages/ or the set image save path
         /// </summary>
         public bool SaveImages = false;
 
         [ConditionalHideInInspector("SaveImages", false)]
         public string ImageSavePath;
+        
+        /// <summary>
+        /// Optional grid overlay.
+        /// </summary>
+        public bool Grid = false;
 
         /// <summary>
-        /// Number of raycast rays simulating a single acoustic rays
+        /// Sonar noise parameters.
+        /// </summary>
+        public bool AddNoise = false;
+        public float NoiseLevel = 0.1f; // General noise intensity
+        public float SpeckleLevel = 0.05f; // Speckle noise intensity
+        public float RayleighScale = 1.0f; // Rayleigh noise scale
+        private System.Random systemRandom = new System.Random();
+
+        /// <summary>
+        /// Number of raycast rays simulating a single acoustic ray
         /// </summary>
         int NumRaysPerAccusticRay = 1;
-
 
         public bool DisplayImages = false;
 
@@ -119,7 +142,7 @@ namespace Marus.Sensors
         /// Cartesian and polar raw image arrays for canvas display
         /// </summary>
         [ConditionalHideInInspector("DisplayImages", false)]
-        public RawImage sonarDisplay, sonarPhotoDisplay, sonarCartesianDisplay;
+        public RawImage sonarPhotoDisplay, sonarPolarDisplay, sonarCartesianDisplay, ClassInstancePolarDisplay, ClassInstanceCartesianDisplay;
 
         /// <summary>
         /// Cartesian and polar texture2D arrays
@@ -148,18 +171,20 @@ namespace Marus.Sensors
                 ImageSavePath = Application.dataPath + "/../SaveImages/";
             }
             Directory.CreateDirectory(ImageSavePath);
+
             int totalRays = WidthRes * HeightRes * NumRaysPerAccusticRay;
 
             _saver = GetComponent<SonarObjectDetectionSaver>();
             saverExists = _saver is not null && _saver.isActiveAndEnabled == true;
 
             sonarImage = new Texture2D(WidthRes, imageHeight, TextureFormat.RGB24, false);
-            ClassInstancePolarImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
+            ClassInstancePolarImage = new Texture2D(WidthRes, imageHeight, TextureFormat.RGB24, false);
             sonarPhotoImage = new Texture2D(WidthRes, HeightRes,TextureFormat.RGB24, false);
             sonarCartesianImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
             ClassInstanceImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
             sonarData = new NativeArray<SonarReading>(totalRays, Allocator.Persistent);
 
+            //sLoadSonarConfigs();
             InitializeRayArray();
 
             _raycastHelper = new RaycastJobHelper<SonarReading>(gameObject, directionsLocal, OnSonarHit, OnFinish, MaxDistance);
@@ -232,6 +257,30 @@ namespace Marus.Sensors
                 return;
             }
         }
+        
+        /// <summary>
+        /// Method for setting custom sonar configurations selected from the dropdown sonar list
+        /// </summary>
+        /*public void SetSonarConfig()
+        {
+
+        } */
+
+        /*public void LoadSonarConfigs()
+        {
+            var jsonText = File.ReadAllText("SonarPresets.json");
+            SonarConfigs = JsonConvert.DeserializeObject<List<SonarConfigs>>(jsonText);
+            sonarObj = target as RaycastSonar;
+            sonarObj.Configs = SonarConfigs;
+            _choices = new string[SonarConfigs.Count];
+            var i = 0;
+            foreach(var cfg in SonarConfigs)
+            {
+                _choices[i++] = cfg.Name;
+            }
+            _configName = _choices[sonarObj.ConfigIndex];
+        } */
+
         void OnDestroy()
         {
             try
@@ -249,6 +298,8 @@ namespace Marus.Sensors
             var distance = hit.distance;
             var sonarReading = new SonarReading();
             (int, int) value;
+            float intensity = 0;
+
             if (saverExists)
             {
                 if (_saver.objectClassesAndInstances.TryGetValue(hit.colliderInstanceID, out value))
@@ -258,16 +309,21 @@ namespace Marus.Sensors
                 }
             }
 
-            if (distance < MinDistance || hit.point.y > WATER_LEVEL || hit.point == Vector3.zero) // if above water, it is not hit!
+            //in case of out of range rays add only thermal and speckle noise
+            if (distance < MinDistance || hit.point.y > WATER_LEVEL || hit.point == Vector3.zero)
             {
                 sonarReading.Valid = false;
+                sonarReading.Intensity = 0;
             }
             else
             {
                 sonarReading.Valid = true;
                 sonarReading.Distance = hit.distance;
 
-                sonarReading.Intensity = (RayIntensity/100) * (float)(Math.Acos(Math.Abs(Vector3.Dot(direction, hit.normal))));
+                double alpha = Math.PI - (Math.Acos(Vector3.Dot(direction, hit.normal)));
+                intensity = (RayIntensity / 10) * (float)(Math.Cos(alpha) * Math.Cos(alpha));
+
+                sonarReading.Intensity = intensity;
             }
             return sonarReading;
         }
@@ -296,8 +352,12 @@ namespace Marus.Sensors
             }
 
             sonarPhotoImage.Apply();
-            sonarPhotoDisplay.texture = sonarPhotoImage;
+             if (ClassInstancePolarImage is not null)
+             {
+                sonarPhotoDisplay.texture = sonarPhotoImage;
+             }
         }
+
         /// <summary>
         /// Creates a polar sonar image - 2D projection with bearing on X axis and range on Y axis. 
         /// Width and height can be set independently, .png image saving optional.
@@ -307,33 +367,66 @@ namespace Marus.Sensors
             Color pixel;
             Color annPixel;
             int xCoordinate, yCoordinate;
+            float currentIntensity;
             float[] yIntensity = new float[imageHeight];
+            int[] currentClassId = new int[imageHeight];
+            int[] currentInstanceId = new int[imageHeight];
+
             for (var x = 0; x < WidthRes; x++)
             {
                 //squashing all spatial columns into 2D and adding the intensities
                 for (var y = 0; y < HeightRes; y++)
                 {
-                    var r = reading[x * HeightRes + y];
-                    yCoordinate = DistanceToImageY(r.Distance);
-                    yIntensity[yCoordinate] += r.Intensity;
-                    annPixel = new Color(r.ClassId/255f, r.InstanceId/255f, yIntensity[yCoordinate], 0);
-                    ClassInstancePolarImage.SetPixel(x, yCoordinate, annPixel);
+                    currentIntensity = reading[x * HeightRes + y].Intensity;
+                    
+                    //add sonar noise depending on the a target has been hit or not
+                    if (currentIntensity != 0 && AddNoise)
+                    {
+                        currentIntensity = AddRayleighNoise(currentIntensity, reading[x * HeightRes + y].Distance);
+                    }
+
+                    yCoordinate = DistanceToImageY(reading[x * HeightRes + y].Distance);
+                    yIntensity[yCoordinate] += currentIntensity;
+                    
+                    //only one object at a range-bearing point gets tracked (the highest one overwrites all the lower ones)
+                    if(reading[x * HeightRes + y].ClassId != 0)
+                    {
+                        currentClassId[yCoordinate] = reading[x * HeightRes + y].ClassId;
+                        currentInstanceId[yCoordinate] = reading[x * HeightRes + y].InstanceId;
+                    }
+
                 }
 
                 //stacking the intensities into corresponding 2D image columns
                 for (var y = 0; y < imageHeight; y++)
                 {
-                    pixel = new Color(yIntensity[y], yIntensity[y], yIntensity[y], 1);
+                    pixel = new UnityEngine.Color(yIntensity[y], yIntensity[y], yIntensity[y], 1);
                     sonarImage.SetPixel(x, y, pixel);
+                    annPixel = new Color(currentClassId[y]/255f, currentInstanceId[y]/255f, yIntensity[y], 1);
+                    ClassInstancePolarImage.SetPixel(x, y, annPixel);
                 }
+                //clear before next column
                 Array.Clear(yIntensity, 0, yIntensity.Length);
+                Array.Clear(currentClassId, 0, currentClassId.Length);
+                Array.Clear(currentInstanceId, 0, currentInstanceId.Length);
+            }
+
+            if (Grid)
+            {
+                sonarImage = AddGridAndLabels(sonarImage);
             }
 
             sonarImage.Apply();
             ClassInstancePolarImage.Apply();
-            if (sonarPhotoDisplay is not null)
+
+            if (ClassInstancePolarImage is not null)
             {
-                sonarDisplay.texture = sonarImage;
+                //ClassInstancePolarDisplay.texture = ClassInstancePolarImage;
+            }
+
+            if (sonarPolarDisplay is not null)
+            {
+                sonarPolarDisplay.texture = sonarImage;
             }
 
             if (SaveImages){
@@ -370,12 +463,20 @@ namespace Marus.Sensors
                         pixel = sonarImage.GetPixel(xCoordinate, yCoordinate);
                         annPixel = ClassInstancePolarImage.GetPixel(xCoordinate, yCoordinate);
 
+                        if (AddNoise)
+                        {
+                            pixel.r = AddGaussianNoise(pixel.r);
+                            pixel.r = AddSpeckleNoise(pixel.r);
+                            pixel.g = pixel.r;
+                            pixel.b = pixel.r;
+                        }
+
                         sonarCartesianImage.SetPixel(CartesianXRes / 2 - x, y, pixel);
                         ClassInstanceImage.SetPixel(CartesianXRes / 2 - x, y, annPixel);
                     }
                     else
                     {
-                        pixel = new Color(1, 1, 1, 1);
+                        pixel = new Color(0, 0, 0, 1);
                         sonarCartesianImage.SetPixel(CartesianXRes / 2 - x, y, pixel);
                         ClassInstanceImage.SetPixel(CartesianXRes / 2 - x, y, pixel);
                     }
@@ -398,12 +499,19 @@ namespace Marus.Sensors
                         yCoordinate = (int)Math.Round(r / (MaxDistance - MinDistance) * imageHeight);
                         pixel = sonarImage.GetPixel(xCoordinate, yCoordinate);
                         annPixel = ClassInstancePolarImage.GetPixel(xCoordinate, yCoordinate);
+                        if (AddNoise)
+                        {
+                            pixel.r = AddGaussianNoise(pixel.r);
+                            pixel.r = AddSpeckleNoise(pixel.r);
+                            pixel.g = pixel.r;
+                            pixel.b = pixel.r;
+                        }
                         sonarCartesianImage.SetPixel(x + CartesianXRes / 2, y, pixel);
                         ClassInstanceImage.SetPixel(x +CartesianXRes / 2, y, annPixel);
                     }
                     else
                     {
-                        pixel = new Color(1, 1, 1, 1);
+                        pixel = new Color(0, 0, 0, 1);
                         sonarCartesianImage.SetPixel(x + CartesianXRes / 2, y, pixel);
                         ClassInstanceImage.SetPixel(x + CartesianXRes / 2, y, pixel);
                     }
@@ -412,6 +520,12 @@ namespace Marus.Sensors
 
             sonarCartesianImage.Apply();
             ClassInstanceImage.Apply();
+
+            if (ClassInstanceCartesianDisplay is not null)
+            {
+                ClassInstanceCartesianDisplay.texture = ClassInstanceImage;
+            }
+
             if (sonarCartesianDisplay is not null)
             {
                 sonarCartesianDisplay.texture = sonarCartesianImage;
@@ -424,5 +538,78 @@ namespace Marus.Sensors
                 imageCount += 1;
             }
         }
+
+        public Texture2D AddGridAndLabels(Texture2D image)
+        {
+            //add horizontal grid
+            int r = 0;
+            for (int i = 1; i < MaxDistance / 10; i++)
+            {
+                r = DistanceToImageY(i * 10);
+                image = DrawLine(image, 0, WidthRes, r, r);
+            }
+
+            r = DistanceToImageY(MaxDistance);
+            image = DrawLine(image, 0, WidthRes, r, r);
+
+            //add vertical grid
+            for (int i = 0; i < 5; i++)
+            {
+                image = DrawLine(image, i * WidthRes / 4, i * WidthRes / 4, 0, imageHeight);
+            }
+
+            return image;
+        }
+
+        public Texture2D DrawLine(Texture2D baseImage, int startX, int endX, int startY, int endY)
+        {
+            UnityEngine.Color color = new UnityEngine.Color(1, 1, 1, 1);
+
+            for (int x = startX; x <= endX; x++)
+            {
+                for (int y = startY; y <= endY; y++)
+                {
+                    baseImage.SetPixel(x, y, color);
+                }
+            }
+            return baseImage;
+        }
+
+        private float AddGaussianNoise(float intensity)
+        {
+            float noise = RandomGaussian() * NoiseLevel;
+            return Mathf.Clamp(intensity + noise, 0.0f, 1.0f);
+        }
+
+        private float RandomGaussian()
+        {
+            float u1 = 1.0f - (float)systemRandom.NextDouble();
+            float u2 = 1.0f - (float)systemRandom.NextDouble();
+            return Mathf.Sqrt(-2.0f * Mathf.Log(u1)) * Mathf.Sin(2.0f * Mathf.PI * u2);
+        }
+
+        private float AddSpeckleNoise(float intensity)
+        {
+            float speckle = (1 + RandomGaussian() * SpeckleLevel);
+            return Mathf.Clamp(intensity * speckle, 0.0f, 1.0f);
+        }
+
+        private float AddRayleighNoise(float intensity, float distance)
+        {
+            float rayleighNoise = DistanceRayleigh(RayleighScale, distance);
+            return Mathf.Clamp(intensity + rayleighNoise, 0.0f, 1.0f);
+        }
+
+        private float DistanceRayleigh(float sigma, float r)
+        {
+            float p_r = (r / sigma * sigma) * Mathf.Exp(-((r * r) / (2 * sigma * sigma)));
+            return p_r;
+        }
+        private float RandomRayleigh(float scale)
+        {
+            float u = (float)systemRandom.NextDouble();
+            return scale * Mathf.Sqrt(-2.0f * Mathf.Log(u));
+        }
+
     }
 }
