@@ -1,4 +1,4 @@
-// Copyright 2022 Laboratory for Underwater Systems and Technologies (LABUST)
+// Copyright 2025 Laboratory for Underwater Systems and Technologies (LABUST)
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -116,7 +116,7 @@ namespace Marus.Sensors
 
         [ConditionalHideInInspector("SaveImages", false)]
         public string ImageSavePath;
-        
+
         /// <summary>
         /// Optional grid overlay.
         /// </summary>
@@ -130,6 +130,17 @@ namespace Marus.Sensors
         public float SpeckleLevel = 0.05f; // Speckle noise intensity
         public float RayleighScale = 1.0f; // Rayleigh noise scale
         private System.Random systemRandom = new System.Random();
+
+        public bool AddColormap = false;
+        [ConditionalHideInInspector("AddColormap", false)]
+        public Colormap.Palette SelectedPalette = Colormap.Palette.Gemini;
+        public enum ColormapType
+        {
+            Gemini, Jet, Parula, Turbo, HSV, Hot
+        }
+
+        private static Dictionary<ColormapType, Color[]> colormapLUT = new Dictionary<ColormapType, Color[]>();
+
 
         /// <summary>
         /// Number of raycast rays simulating a single acoustic ray
@@ -179,7 +190,7 @@ namespace Marus.Sensors
 
             sonarImage = new Texture2D(WidthRes, imageHeight, TextureFormat.RGB24, false);
             ClassInstancePolarImage = new Texture2D(WidthRes, imageHeight, TextureFormat.RGB24, false);
-            sonarPhotoImage = new Texture2D(WidthRes, HeightRes,TextureFormat.RGB24, false);
+            sonarPhotoImage = new Texture2D(WidthRes, HeightRes, TextureFormat.RGB24, false);
             sonarCartesianImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
             ClassInstanceImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
             sonarData = new NativeArray<SonarReading>(totalRays, Allocator.Persistent);
@@ -207,6 +218,7 @@ namespace Marus.Sensors
             ComposeCartesianImage(sonarReadings);
 
             hasData = true;
+
         }
         /// <summary>
         /// Function for converting hit distance to Y coordinate of the cartesian projection. 
@@ -257,7 +269,7 @@ namespace Marus.Sensors
                 return;
             }
         }
-        
+
         /// <summary>
         /// Method for setting custom sonar configurations selected from the dropdown sonar list
         /// </summary>
@@ -289,7 +301,7 @@ namespace Marus.Sensors
                 sonarData.Dispose();
                 directionsLocal.Dispose();
             }
-            catch {}
+            catch { }
 
         }
 
@@ -352,10 +364,10 @@ namespace Marus.Sensors
             }
 
             sonarPhotoImage.Apply();
-             if (ClassInstancePolarImage is not null)
-             {
+            if (ClassInstancePolarImage is not null)
+            {
                 sonarPhotoDisplay.texture = sonarPhotoImage;
-             }
+            }
         }
 
         /// <summary>
@@ -378,7 +390,7 @@ namespace Marus.Sensors
                 for (var y = 0; y < HeightRes; y++)
                 {
                     currentIntensity = reading[x * HeightRes + y].Intensity;
-                    
+
                     //add sonar noise depending on the a target has been hit or not
                     if (currentIntensity != 0 && AddNoise)
                     {
@@ -387,9 +399,9 @@ namespace Marus.Sensors
 
                     yCoordinate = DistanceToImageY(reading[x * HeightRes + y].Distance);
                     yIntensity[yCoordinate] += currentIntensity;
-                    
+
                     //only one object at a range-bearing point gets tracked (the highest one overwrites all the lower ones)
-                    if(reading[x * HeightRes + y].ClassId != 0)
+                    if (reading[x * HeightRes + y].ClassId != 0)
                     {
                         currentClassId[yCoordinate] = reading[x * HeightRes + y].ClassId;
                         currentInstanceId[yCoordinate] = reading[x * HeightRes + y].InstanceId;
@@ -402,7 +414,7 @@ namespace Marus.Sensors
                 {
                     pixel = new UnityEngine.Color(yIntensity[y], yIntensity[y], yIntensity[y], 1);
                     sonarImage.SetPixel(x, y, pixel);
-                    annPixel = new Color(currentClassId[y]/255f, currentInstanceId[y]/255f, yIntensity[y], 1);
+                    annPixel = new Color(currentClassId[y] / 255f, currentInstanceId[y] / 255f, yIntensity[y], 1);
                     ClassInstancePolarImage.SetPixel(x, y, annPixel);
                 }
                 //clear before next column
@@ -429,7 +441,8 @@ namespace Marus.Sensors
                 sonarPolarDisplay.texture = sonarImage;
             }
 
-            if (SaveImages){
+            if (SaveImages)
+            {
                 byte[] bytes = sonarImage.EncodeToPNG();
                 File.WriteAllBytes(Path.Combine(ImageSavePath, "ImagePolar" + imageCount + ".png"), bytes);
             }
@@ -471,6 +484,8 @@ namespace Marus.Sensors
                             pixel.b = pixel.r;
                         }
 
+                        pixel = ApplyColorMapping(pixel.r);
+
                         sonarCartesianImage.SetPixel(CartesianXRes / 2 - x, y, pixel);
                         ClassInstanceImage.SetPixel(CartesianXRes / 2 - x, y, annPixel);
                     }
@@ -506,8 +521,11 @@ namespace Marus.Sensors
                             pixel.g = pixel.r;
                             pixel.b = pixel.r;
                         }
+
+                        pixel = ApplyColorMapping(pixel.r);
+
                         sonarCartesianImage.SetPixel(x + CartesianXRes / 2, y, pixel);
-                        ClassInstanceImage.SetPixel(x +CartesianXRes / 2, y, annPixel);
+                        ClassInstanceImage.SetPixel(x + CartesianXRes / 2, y, annPixel);
                     }
                     else
                     {
@@ -609,6 +627,18 @@ namespace Marus.Sensors
         {
             float u = (float)systemRandom.NextDouble();
             return scale * Mathf.Sqrt(-2.0f * Mathf.Log(u));
+        }
+
+        public Color ApplyColorMapping(float intensity)
+        {
+            if (AddColormap)
+            {
+                return Colormap.GetColor(intensity, SelectedPalette);
+            }
+            else
+            {
+                return new Color(intensity, intensity, intensity, 1f); // Grayscale
+            }
         }
 
     }
