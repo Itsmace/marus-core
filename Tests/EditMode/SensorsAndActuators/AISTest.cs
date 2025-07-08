@@ -42,7 +42,7 @@ public class AISTest
         AisManager.Instance.Register(_aisDevice);
         _ais.transform.position = Vector3.zero;
         _rigidbody = _ais.GetComponent<Rigidbody>();
-        _rigidbody.velocity = Vector3.zero;
+        _rigidbody.linearVelocity = Vector3.zero;
 
         _ais2 = Utils.CreateAndInitializeObject<AisSensor>("AIS2", PrimitiveType.Cube);
         _aisDevice2 = _ais2.gameObject.AddComponent<AisDevice>();
@@ -62,7 +62,7 @@ public class AISTest
 
         _ais.transform.eulerAngles = new Vector3(0, 90, 0);
         _ais.transform.position = new Vector3(-1, 0, 0);
-        _rigidbody.velocity = new Vector3(-3f, 0, 0);
+        _rigidbody.linearVelocity = new Vector3(-3f, 0, 0);
         Utils.CallNonpublicMethod(_ais, "SampleSensor");
         Assert.AreEqual(58, _ais.SOG);
         Assert.AreEqual(2700, _ais.COG);

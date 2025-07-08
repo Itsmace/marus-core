@@ -208,7 +208,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
             if (!m_IsGrounded && !m_IsSwimming)
             {
-                m_Animator.SetFloat("Jump", m_Rigidbody.velocity.y);
+                m_Animator.SetFloat("Jump", m_Rigidbody.linearVelocity.y);
             }
 
             // calculate which leg is behind, so as to leave that leg trailing in the jump animation
@@ -280,7 +280,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                     floaterBuoy.buoyUp = false;
                     m_Rigidbody.useGravity = false;
 
-                    m_Rigidbody.velocity = (-m_Rigidbody.transform.up * 2);
+                    m_Rigidbody.linearVelocity = (-m_Rigidbody.transform.up * 2);
                 }
                 else if (jump)
                 {
@@ -288,7 +288,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
 
                     if (m_Rigidbody.transform.position.y < floaterBuoy.waterLevel - floaterBuoy.buoyancyCentreOffset.y)
                     {
-                        m_Rigidbody.velocity = (m_Rigidbody.transform.up * 2);
+                        m_Rigidbody.linearVelocity = (m_Rigidbody.transform.up * 2);
                     }
                     else
                     {
@@ -299,11 +299,11 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                 else if (m_Rigidbody.useGravity == false)
                 {
                     // Zero out Y-value
-                    m_Rigidbody.velocity = new Vector3(m_Rigidbody.velocity.x, 0, m_Rigidbody.velocity.z);
+                    m_Rigidbody.linearVelocity = new Vector3(m_Rigidbody.linearVelocity.x, 0, m_Rigidbody.linearVelocity.z);
                 }
 
                 m_GroundCheckDistance = m_OrigGroundCheckDistance; // This is implemented to fix bug when jumping near water
-                m_Rigidbody.velocity = (m_Rigidbody.transform.forward * m_ForwardAmount * 5) + new Vector3(0, m_Rigidbody.velocity.y, 0);
+                m_Rigidbody.linearVelocity = (m_Rigidbody.transform.forward * m_ForwardAmount * 5) + new Vector3(0, m_Rigidbody.linearVelocity.y, 0);
             }
         }
 
@@ -313,7 +313,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             Vector3 extraGravityForce = (Physics.gravity * m_GravityMultiplier) - Physics.gravity;
             m_Rigidbody.AddForce(extraGravityForce);
 
-            m_GroundCheckDistance = m_Rigidbody.velocity.y < 0 ? m_OrigGroundCheckDistance : 0.01f;
+            m_GroundCheckDistance = m_Rigidbody.linearVelocity.y < 0 ? m_OrigGroundCheckDistance : 0.01f;
         }
 
 
@@ -323,7 +323,7 @@ namespace UnityStandardAssets.Characters.ThirdPerson
             if (jump && !crouch && m_Animator.GetCurrentAnimatorStateInfo(0).IsName("Grounded"))
             {
                 // jump!
-                m_Rigidbody.velocity = new Vector3(m_Rigidbody.velocity.x, m_JumpPower, m_Rigidbody.velocity.z);
+                m_Rigidbody.linearVelocity = new Vector3(m_Rigidbody.linearVelocity.x, m_JumpPower, m_Rigidbody.linearVelocity.z);
                 m_IsGrounded = false;
                 m_Animator.applyRootMotion = false;
                 m_GroundCheckDistance = 0.1f;
@@ -340,8 +340,8 @@ namespace UnityStandardAssets.Characters.ThirdPerson
                 Vector3 v = (m_Animator.deltaPosition * m_MoveSpeedMultiplier) / Time.deltaTime;
 
                 // we preserve the existing y part of the current velocity.
-                v.y = m_Rigidbody.velocity.y;
-                m_Rigidbody.velocity = v;
+                v.y = m_Rigidbody.linearVelocity.y;
+                m_Rigidbody.linearVelocity = v;
             }
         }
 

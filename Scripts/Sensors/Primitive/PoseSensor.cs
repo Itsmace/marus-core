@@ -50,7 +50,7 @@ namespace Marus.Sensors.Primitive
         {
             position = measuredObject.position;
             orientation = measuredObject.rotation;
-            linearVelocity = measuredObject.transform.InverseTransformVector(measuredObject.velocity);
+            linearVelocity = measuredObject.transform.InverseTransformVector(measuredObject.linearVelocity);
             angularVelocity = measuredObject.angularVelocity;
             if (debug)
             {

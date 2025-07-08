@@ -53,7 +53,7 @@ public class ImuTest
     {
         float vel_first = 1.0f, vel_later = 1.5f;
         
-        _rigidBody.velocity = new Vector3(vel_first, 0, 0);
+        _rigidBody.linearVelocity = new Vector3(vel_first, 0, 0);
         _rigidBody.rotation = new Quaternion(0.6f, 0, 0, 0.8f).normalized;
         _rigidBody.angularVelocity = new Vector3(0.3f, 0, 0);
         Utils.CallNonpublicMethod(_imu, "SampleSensor");
@@ -61,7 +61,7 @@ public class ImuTest
         // skip one frame (deltaTime)
         yield return null;
 
-        _rigidBody.velocity = new Vector3(vel_later, 0, 0);
+        _rigidBody.linearVelocity = new Vector3(vel_later, 0, 0);
         _rigidBody.angularVelocity = new Vector3(0.35f, 0, 0);
         Utils.CallNonpublicMethod(_imu, "SampleSensor");
 

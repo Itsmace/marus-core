@@ -118,7 +118,7 @@ namespace Marus
             //The resistance coefficient - same for all triangles
             float Cf = BoatPhysicsMath.ResistanceCoefficient(
                 rhoWater, 
-                boatRB.velocity.magnitude,
+                boatRB.linearVelocity.magnitude,
                 modifyBoatMesh.CalculateUnderWaterLength());
 
             //To calculate the slamming force we need the velocity at each of the original triangles

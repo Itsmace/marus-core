@@ -41,7 +41,7 @@ public class PoseTest
     {
         Utils.CallNonpublicMethod(_poseSensor, "SampleSensor");
         _rigidBody.position = new Vector3(2, 3, 5);
-        _rigidBody.velocity = new Vector3(0, 0, 0.5f);
+        _rigidBody.linearVelocity = new Vector3(0, 0, 0.5f);
         _rigidBody.angularVelocity = new Vector3(0.4f, 0, 0);
         _rigidBody.rotation = new Quaternion(0.6f, 0, 0, 0.8f).normalized;
         Utils.CallNonpublicMethod(_poseSensor, "SampleSensor");

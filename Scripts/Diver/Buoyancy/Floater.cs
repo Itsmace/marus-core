@@ -15,7 +15,7 @@ public class Floater : MonoBehaviour {
 		forceFactor = 1f - ((actionPoint.y - waterLevel) / floatHeight);
 		
 		if (forceFactor > 0f && buoyUp) {
-			Vector3 uplift = -Physics.gravity * (forceFactor - GetComponent<Rigidbody>().velocity.y * bounceDamp);
+			Vector3 uplift = -Physics.gravity * (forceFactor - GetComponent<Rigidbody>().linearVelocity.y * bounceDamp);
 			GetComponent<Rigidbody>().AddForceAtPosition(uplift, actionPoint);
 		}
 	}

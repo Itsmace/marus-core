@@ -82,7 +82,7 @@ namespace Marus.Sensors.AIS
         {
             // TODO see if we can remove rigidbody dependency
             float conversion = 1.94384f; // m/s to kn conversion constant
-            float velocity = rb.velocity.magnitude * conversion;
+            float velocity = rb.linearVelocity.magnitude * conversion;
             SOG = (uint) Mathf.Round(velocity * 10);
         }
     }
