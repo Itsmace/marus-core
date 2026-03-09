@@ -27,14 +27,14 @@ namespace Marus.Sensors
     /// </summary>
     public class CameraSensor : SensorBase
     {
-        [ReadOnly]
+        [Header("Camera Resolution")]
         public int ImageWidth = 1920;
-
-        [ReadOnly]
         public int ImageHeight = 1080;
 
         Camera _camera;
-        RenderTexture _tmpTexture;
+        public RenderTexture DebugTexture => _renderTexture;
+        
+        RenderTexture _renderTexture;
         TextureFormat _textureFormat = TextureFormat.RGB24;
         Texture2D _texture;
 
@@ -43,18 +43,18 @@ namespace Marus.Sensors
 
         void Start()
         {
-
-#if UNITY_EDITOR
-            string[] res = UnityStats.screenRes.Split('x');
-            ImageWidth =  int.Parse(res[0]);
-            ImageHeight = int.Parse(res[1]);
-#else
-            ImageWidth =  Screen.width;
-            ImageHeight = Screen.height;
-#endif
+            ImageWidth = Mathf.Max(ImageWidth, 1);
+            ImageHeight = Mathf.Max(ImageHeight, 1);
 
             _camera = GetComponent<Camera>();
-            _camera.enabled = false;
+            _camera.enabled = true; // Enable camera to avoid extra forced HDRP renderi pipeline
+            
+            _camera.aspect = (float)ImageWidth / ImageHeight;
+            
+            // Create persistent RenderTexture
+            _renderTexture = new RenderTexture(ImageWidth, ImageHeight, 16);
+            _camera.targetTexture = _renderTexture;
+            
             Data = new byte[ImageHeight*ImageWidth*3];
             _texture = new Texture2D
             (
@@ -67,20 +67,25 @@ namespace Marus.Sensors
 
         protected override void SampleSensor()
         {
-            if (_camera.targetTexture != null)
-            {
-                RenderTexture.ReleaseTemporary(_camera.targetTexture);
-            }
-            _camera.targetTexture = RenderTexture.GetTemporary(ImageWidth, ImageHeight, 16);
-            RenderTexture.active = _camera.targetTexture;
-            _camera.Render();
-            AsyncGPUReadback.Request(_camera.targetTexture, 0, _textureFormat, ReadbackCompleted);
+            RenderTexture.active = _renderTexture;
+            //_camera.Render();
+            AsyncGPUReadback.Request(_renderTexture, 0, _textureFormat, ReadbackCompleted);
         }
 
         void ReadbackCompleted(AsyncGPUReadbackRequest request)
         {
+            //Debug.Log("Camera frame captured");
+            
             Data = request.GetData<byte>().ToArray();
             hasData = true;
+        }
+        
+        void OnDestroy()
+        {
+            if (_renderTexture != null)
+            {
+                _renderTexture.Release();
+            }
         }
     }
 }
