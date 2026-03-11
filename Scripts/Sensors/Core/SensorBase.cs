@@ -29,7 +29,10 @@ namespace Marus.Sensors
     {
         protected void Awake()
         {
-            SensorSampler.Instance.AddSensorCallback(this, SampleSensor);
+            var sampler = FindObjectOfType<SensorSampler>();
+
+            if (sampler != null)
+                sampler.AddSensorCallback(this, SampleSensor);
         }
 
         //public bool RunRecording = false;
@@ -89,12 +92,26 @@ namespace Marus.Sensors
 
         void OnEnable()
         {
-            SensorSampler.Instance.EnableCallback(this);
+            var sampler = FindObjectOfType<SensorSampler>();
+
+            if (sampler != null)
+                sampler.EnableCallback(this);
         }
 
         void OnDisable()
         {
-            SensorSampler.Instance.DisableCallback(this);
+            var sampler = FindObjectOfType<SensorSampler>();
+
+            if (sampler != null)
+                sampler.DisableCallback(this);
+        }
+        
+        void OnDestroy()
+        {
+            var sampler = FindObjectOfType<SensorSampler>();
+
+            if (sampler != null)
+                sampler.RemoveSensorCallback(this);
         }
 
     }

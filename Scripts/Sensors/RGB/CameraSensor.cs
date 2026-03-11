@@ -1,42 +1,29 @@
 // Copyright 2022 Laboratory for Underwater Systems and Technologies (LABUST)
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 using UnityEngine;
 using UnityEngine.Rendering;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 using Marus.Sensors.Core;
 
 namespace Marus.Sensors
 {
     [RequireComponent(typeof(Camera))]
-    /// <summary>
-    /// Camera sensor implementation
-    /// </summary>
     public class CameraSensor : SensorBase
     {
         [Header("Camera Resolution")]
         public int ImageWidth = 1920;
         public int ImageHeight = 1080;
 
+        float nextCaptureTime = 0;
+        bool readbackPending = false;
+
         Camera _camera;
-        public RenderTexture DebugTexture => _renderTexture;
-        
+
         RenderTexture _renderTexture;
-        TextureFormat _textureFormat = TextureFormat.RGB24;
-        Texture2D _texture;
+
+        TextureFormat _readbackFormat = TextureFormat.RGB24;
+        int _channels = 3;
+
+        public RenderTexture DebugTexture => _renderTexture;
 
         [HideInInspector]
         public byte[] Data;
@@ -47,44 +34,67 @@ namespace Marus.Sensors
             ImageHeight = Mathf.Max(ImageHeight, 1);
 
             _camera = GetComponent<Camera>();
-            _camera.enabled = true; // Enable camera to avoid extra forced HDRP renderi pipeline
-            
+
             _camera.aspect = (float)ImageWidth / ImageHeight;
-            
-            // Create persistent RenderTexture
-            _renderTexture = new RenderTexture(ImageWidth, ImageHeight, 16);
-            _camera.targetTexture = _renderTexture;
-            
-            Data = new byte[ImageHeight*ImageWidth*3];
-            _texture = new Texture2D
-            (
+
+            // Persistent render target
+            _renderTexture = new RenderTexture(
                 ImageWidth,
                 ImageHeight,
-                _textureFormat,
-                false
+                0,
+                RenderTextureFormat.ARGB32
             );
+
+            _renderTexture.Create();
+
+            _camera.targetTexture = _renderTexture;
+
+            // Let Unity render continuously
+            _camera.enabled = true;
+
+            Data = new byte[ImageHeight * ImageWidth * _channels];
         }
 
         protected override void SampleSensor()
         {
-            RenderTexture.active = _renderTexture;
-            //_camera.Render();
-            AsyncGPUReadback.Request(_renderTexture, 0, _textureFormat, ReadbackCompleted);
+            if (Time.time < nextCaptureTime || readbackPending)
+                return;
+
+            nextCaptureTime = Time.time + 1f / SampleFrequency;
+
+            readbackPending = true;
+
+            AsyncGPUReadback.Request(
+                _renderTexture,
+                0,
+                _readbackFormat,
+                ReadbackCompleted
+            );
         }
 
         void ReadbackCompleted(AsyncGPUReadbackRequest request)
         {
-            //Debug.Log("Camera frame captured");
-            
-            Data = request.GetData<byte>().ToArray();
+            readbackPending = false;
+
+            if (request.hasError)
+            {
+                Debug.LogWarning("GPU readback error");
+                return;
+            }
+
+            var raw = request.GetData<byte>();
+
+            raw.CopyTo(Data);
+
             hasData = true;
         }
-        
+
         void OnDestroy()
         {
             if (_renderTexture != null)
             {
                 _renderTexture.Release();
+                Destroy(_renderTexture);
             }
         }
     }

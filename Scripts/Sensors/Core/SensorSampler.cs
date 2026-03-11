@@ -28,18 +28,20 @@ namespace Marus.Sensors
 
         void FixedUpdate()
         {
-            foreach (var kvp in _sensorCallbacks)
+            foreach (var kvp in new List<KeyValuePair<int, SensorCallback>>(_sensorCallbacks))
             {
                 var callback = kvp.Value;
 
                 if (callback.active
                     && callback.sensor.isActiveAndEnabled)
                 {
-                    if (!_timeOfLastCallback.TryGetValue(kvp.Key, out var time)
+                    int id = kvp.Key;
+
+                    if (!_timeOfLastCallback.TryGetValue(id, out var time)
                         || EnoughTimePassed(time, callback.sensor))
                     {
                         callback.callback();
-                        callback.sensor.hasData = true;
+                        //callback.sensor.hasData = true;
                         _timeOfLastCallback[kvp.Key] = Time.fixedTimeAsDouble;
                     }
                 }
@@ -67,7 +69,7 @@ namespace Marus.Sensors
             _sensorCallbacks.Add(sensor.GetInstanceID(), sensorCallback);
         }
 
-        private void RemoveSensorCallback(SensorBase sensor)
+        internal void RemoveSensorCallback(SensorBase sensor)
         {
             _sensorCallbacks.Remove(sensor.GetInstanceID());
         }
@@ -86,6 +88,12 @@ namespace Marus.Sensors
             {
                 callback.active = true;
             }
+        }
+        
+        void OnDestroy()
+        {
+            _sensorCallbacks.Clear();
+            _timeOfLastCallback.Clear();
         }
 
     }

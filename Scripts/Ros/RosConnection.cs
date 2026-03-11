@@ -292,29 +292,18 @@ namespace Marus.Networking
         async void OnDisable()
         {
             if (_streamingChannel == null)
-            {
                 return;
-            }
 
-            Debug.Log("Shutting down grpc clients and channel. Await for sucessfull confirmation...");
-            var awaitable = _streamingChannel?.ShutdownAsync();
+            Debug.Log("Shutting down gRPC channel...");
 
-
-            int time = 0;
-            while (!awaitable.IsCompleted && time < 3)
+            try
             {
-                Thread.Sleep(1000);
-                time++;
+                await _streamingChannel.ShutdownAsync();
+                Debug.Log("gRPC shutdown successful.");
             }
-            if (awaitable.IsCompleted)
+            catch (Exception e)
             {
-                Debug.Log("Shut down of grpc clients and channel successfull.");
-                await awaitable;
-            }
-            else
-            {
-                awaitable.Dispose();
-                Debug.Log("Shut down of grpc clients and channel failed. Some client does not have cancelation token set.");
+                Debug.Log("gRPC shutdown skipped: " + e.Message);
             }
         }
     }
