@@ -1,5 +1,3 @@
-// Copyright 2022 Laboratory for Underwater Systems and Technologies (LABUST)
-
 using UnityEngine;
 using UnityEngine.Rendering;
 using Marus.Sensors.Core;
@@ -9,7 +7,6 @@ namespace Marus.Sensors
     [RequireComponent(typeof(Camera))]
     public class CameraSensor : SensorBase
     {
-        [Header("Camera Resolution")]
         public int ImageWidth = 1920;
         public int ImageHeight = 1080;
 
@@ -17,7 +14,6 @@ namespace Marus.Sensors
         bool readbackPending = false;
 
         Camera _camera;
-
         RenderTexture _renderTexture;
 
         TextureFormat _readbackFormat = TextureFormat.RGB24;
@@ -30,14 +26,10 @@ namespace Marus.Sensors
 
         void Start()
         {
-            ImageWidth = Mathf.Max(ImageWidth, 1);
-            ImageHeight = Mathf.Max(ImageHeight, 1);
-
             _camera = GetComponent<Camera>();
 
             _camera.aspect = (float)ImageWidth / ImageHeight;
 
-            // Persistent render target
             _renderTexture = new RenderTexture(
                 ImageWidth,
                 ImageHeight,
@@ -46,10 +38,8 @@ namespace Marus.Sensors
             );
 
             _renderTexture.Create();
-
             _camera.targetTexture = _renderTexture;
 
-            // Let Unity render continuously
             _camera.enabled = true;
 
             Data = new byte[ImageHeight * ImageWidth * _channels];
@@ -77,25 +67,12 @@ namespace Marus.Sensors
             readbackPending = false;
 
             if (request.hasError)
-            {
-                Debug.LogWarning("GPU readback error");
                 return;
-            }
 
             var raw = request.GetData<byte>();
-
             raw.CopyTo(Data);
 
             hasData = true;
-        }
-
-        void OnDestroy()
-        {
-            if (_renderTexture != null)
-            {
-                _renderTexture.Release();
-                Destroy(_renderTexture);
-            }
         }
     }
 }
