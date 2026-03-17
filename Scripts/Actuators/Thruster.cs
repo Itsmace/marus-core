@@ -23,6 +23,9 @@ namespace Marus.Actuators
         public float LastForceRequest;
         public float TimeSinceForceRequest = 0.0f;
         public ThrusterAsset ThrusterAsset;
+        
+        public float NormalizedInput;
+        
         Rigidbody _vehicleBody;
         Transform _vehicle;
         GameObjectLogger<LogRecord> _logger;
@@ -60,6 +63,8 @@ namespace Marus.Actuators
         /// <returns></returns>
         public Vector3 ApplyInput(float normalizedInput)
         {
+            NormalizedInput = normalizedInput;
+            
             float value = ThrusterAsset.curve.Evaluate(normalizedInput);
             // from kgf to N
             LastForceRequest = value * 9.80665f;
@@ -80,10 +85,11 @@ namespace Marus.Actuators
 
         void FixedUpdate()
         {
-            if(TimeSinceForceRequest <= 0.2f)
+            if(TimeSinceForceRequest <= 1.0f)
             {
                 Vector3 force = transform.forward * LastForceRequest;
                 _vehicleBody.AddForceAtPosition(force, transform.position, ForceMode.Force);
+                Debug.DrawRay(transform.position, force * 0.01f, Color.red);
             }
             TimeSinceForceRequest += Time.fixedDeltaTime;
         }
