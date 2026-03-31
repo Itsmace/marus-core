@@ -36,6 +36,9 @@ namespace Marus.Sensors.Primitive
 
         protected override CompressedImageStreamingRequest ComposeMessage()
         {
+            if (sensor == null || !sensor.hasData || sensor.sonarCartesianImage == null)
+                return null;
+
             return new CompressedImageStreamingRequest
             {
                 Data = new Sensor.CompressedImage

@@ -198,6 +198,7 @@ namespace Marus.Sensors
                 return 0;
             }
         }
+        
         /// <summary>
         /// Initializes raycast ray directions based on the selection. 
         /// Equidistant distribution projects equidistant points on a horizontal plane (useful for bathymetric or down looking sonar).
@@ -243,7 +244,34 @@ namespace Marus.Sensors
             catch {}
 
         }
+        void OnDrawGizmos()
+        {
+            Gizmos.color = Color.cyan;
 
+            Vector3 origin = transform.position;
+
+            float hFov = HorizontalFieldOfView * 0.5f;
+            float vFov = VerticalFieldOfView * 0.5f;
+            float range = MaxDistance;
+
+            // Draw center ray
+            Gizmos.DrawRay(origin, transform.forward * range);
+
+            // Draw boundary rays
+            Quaternion[] directions =
+            {
+                Quaternion.Euler(-vFov, -hFov, 0),
+                Quaternion.Euler(-vFov,  hFov, 0),
+                Quaternion.Euler( vFov, -hFov, 0),
+                Quaternion.Euler( vFov,  hFov, 0),
+            };
+
+            foreach (var rot in directions)
+            {
+                Vector3 dir = transform.rotation * rot * Vector3.forward;
+                Gizmos.DrawRay(origin, dir * range);
+            }
+        }
         public SonarReading OnSonarHit(RaycastHit hit, Vector3 direction, int i)
         {
             var distance = hit.distance;
