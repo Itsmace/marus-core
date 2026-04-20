@@ -158,6 +158,14 @@ namespace Marus.Sensors
             sonarPhotoImage = new Texture2D(WidthRes, HeightRes,TextureFormat.RGB24, false);
             sonarCartesianImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
             ClassInstanceImage = new Texture2D(CartesianXRes, CartesianYRes, TextureFormat.RGB24, false);
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+                _coroutine = null;
+            }
+            _raycastHelper?.Dispose();
+
+            if (sonarData.IsCreated) sonarData.Dispose();
             sonarData = new NativeArray<SonarReading>(totalRays, Allocator.Persistent);
 
             InitializeRayArray();
@@ -207,6 +215,8 @@ namespace Marus.Sensors
         /// </summary>
         public void InitializeRayArray()
         {
+            if (directionsLocal.IsCreated) directionsLocal.Dispose();
+
             if (sonarRayDistribution == RayDistribution.Equidistant)
             {
                 //get the pitch angle from the sonar frame
@@ -235,14 +245,14 @@ namespace Marus.Sensors
         }
         void OnDestroy()
         {
-            try
+            if (_coroutine != null)
             {
-                _raycastHelper.Dispose();
-                sonarData.Dispose();
-                directionsLocal.Dispose();
+                StopCoroutine(_coroutine);
+                _coroutine = null;
             }
-            catch {}
-
+            _raycastHelper?.Dispose();
+            if (sonarData.IsCreated) sonarData.Dispose();
+            if (directionsLocal.IsCreated) directionsLocal.Dispose();
         }
         void OnDrawGizmos()
         {

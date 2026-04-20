@@ -17,6 +17,7 @@ using UnityEngine;
 using Sensorstreaming;
 using Marus.Core;
 using Sensor;
+using System;
 using System.Collections.Generic;
 using Unity.Collections;
 using static Sensorstreaming.SensorStreaming;
@@ -42,8 +43,29 @@ namespace Marus.Sensors
             base.Start();
         }
 
-        private PointCloud2 GeneratePointCloud2(NativeArray<Vector3> points)
+        private PointCloud2 GeneratePointCloud2(NativeArray<Vector3> points, NativeArray<LidarReading> readings)
         {
+            // Count valid hits to exclude miss rays (stored as Vector3.zero)
+            int validCount = 0;
+            for (int i = 0; i < readings.Length; i++)
+                if (readings[i].IsValid) validCount++;
+
+            // Pack only valid points using Unity2Body convention (FLU: x=forward, y=left, z=up).
+            // TfStreamerROS also uses Unity2Body for the sensor frame, so the convention must match.
+            // Unity sensor-local: x=right, y=up, z=forward
+            // ROS FLU:            x=forward(Uz), y=left(-Ux), z=up(Uy)
+            byte[] bytes = new byte[validCount * 12];
+            int byteIdx = 0;
+            for (int i = 0; i < points.Length; i++)
+            {
+                if (!readings[i].IsValid) continue;
+                var p = points[i];
+                Buffer.BlockCopy(BitConverter.GetBytes( p.z), 0, bytes, byteIdx,     4); // x = forward
+                Buffer.BlockCopy(BitConverter.GetBytes(-p.x), 0, bytes, byteIdx + 4, 4); // y = left
+                Buffer.BlockCopy(BitConverter.GetBytes( p.y), 0, bytes, byteIdx + 8, 4); // z = up
+                byteIdx += 12;
+            }
+
             PointCloud2 pointCloud = new PointCloud2();
             pointCloud.Header = new Std.Header()
             {
@@ -51,45 +73,27 @@ namespace Marus.Sensors
                 Timestamp = TimeHandler.Instance.TimeDouble
             };
             pointCloud.Height = 1;
-            pointCloud.Width = (uint) points.Length;
+            pointCloud.Width = (uint)validCount;
             pointCloud.Fields.AddRange(
                 new List<PointField>()
                 {
-                    new PointField()
-                    {
-                        Name = "x",
-                        Offset = 0,
-                        Datatype = PointField.Types.DataType.Float64,
-                        Count = 1
-                    },
-                    new PointField()
-                    {
-                        Name = "z",
-                        Offset = 4,
-                        Datatype = PointField.Types.DataType.Float64,
-                        Count = 1
-                    },
-                    new PointField()
-                    {
-                        Name = "y",
-                        Offset = 8,
-                        Datatype = PointField.Types.DataType.Float64,
-                        Count = 1
-                    }
+                    // Protobuf enum is 0-indexed; Float64=7 maps to ROS datatype 7 = FLOAT32
+                    new PointField() { Name = "x", Offset = 0, Datatype = PointField.Types.DataType.Float64, Count = 1 },
+                    new PointField() { Name = "y", Offset = 4, Datatype = PointField.Types.DataType.Float64, Count = 1 },
+                    new PointField() { Name = "z", Offset = 8, Datatype = PointField.Types.DataType.Float64, Count = 1 }
                 }
             );
-            var byteLength = points.Length * sizeof(float) * 3;
             pointCloud.IsBigEndian = false;
             pointCloud.PointStep = sizeof(float) * 3;
-            byte[] bytes = points.Reinterpret<byte>(12).ToArray();
-            pointCloud.RowStep = (uint) byteLength;
+            pointCloud.RowStep = (uint)(validCount * sizeof(float) * 3);
+            pointCloud.IsDense = true;
             pointCloud.Data = Google.Protobuf.ByteString.CopyFrom(bytes);
             return pointCloud;
         }
 
         protected override PointCloud2StreamingRequest ComposeMessage()
         {
-            PointCloud2 _pointCloud = GeneratePointCloud2(sensor.Points);
+            PointCloud2 _pointCloud = GeneratePointCloud2(sensor.Points, sensor.Readings);
             return new PointCloud2StreamingRequest()
             {
                 Data = _pointCloud,

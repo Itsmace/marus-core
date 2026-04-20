@@ -20,6 +20,7 @@ using Grpc.Core;
 using static Tf.Tf;
 using Marus.Utils;
 using Marus.CustomInspector;
+using System.Collections;
 using System.Threading.Tasks;
 
 namespace Marus.ROS
@@ -46,6 +47,14 @@ namespace Marus.ROS
         /// </summary>
         public string FrameId;
 
+        /// <summary>
+        /// Publish as a static transform (/tf_static). Use when the frame is rigidly
+        /// mounted and does not move relative to its parent (e.g. a fixed sensor mount).
+        /// Static transforms are always available for any timestamp, preventing TF
+        /// lookup failures in the RViz message filter queue.
+        /// </summary>
+        public bool IsStatic = false;
+
         public bool AddOffset = false;
 
         [ConditionalHideInInspector("AddOffset", false)]
@@ -56,6 +65,7 @@ namespace Marus.ROS
 
         string address;
         double _lastTime;
+        bool _isSending = false;
 
         protected Transform _vehicle;
         public Transform vehicle
@@ -138,17 +148,43 @@ namespace Marus.ROS
 
         public void Start()
         {
-            address = "/tf";
+            address = IsStatic ? "/tf_static" : "/tf";
             if (ParentFrameId == "")
-            {
                 ParentFrameId = "map";
-            }
 
-            streamHandle = streamingClient?.PublishFrame(cancellationToken:RosConnection.Instance.CancellationToken);
+            StartCoroutine(InitWhenConnected());
+        }
+
+        private IEnumerator InitWhenConnected()
+        {
+            while (!RosConnection.Instance.IsConnected)
+                yield return null;
+
+            streamHandle = streamingClient?.PublishFrame(cancellationToken: RosConnection.Instance.CancellationToken);
+
+            if (IsStatic)
+            {
+                // NOTE: /tf_static requires TRANSIENT_LOCAL QoS on the bridge side.
+                // If the bridge publishes with VOLATILE QoS you will see:
+                //   "incompatible QoS... DURABILITY_QOS_POLICY"
+                // and no messages will be received. In that case leave IsStatic unchecked
+                // and rely on the normal 100 Hz /tf publishing instead.
+                yield return new WaitForSeconds(0.5f); // let stream settle
+                UpdateTransform();
+                SendMessage();
+            }
+        }
+
+        private void ReopenStream()
+        {
+            streamHandle = streamingClient?.PublishFrame(cancellationToken: RosConnection.Instance.CancellationToken);
         }
 
         void Update()
         {
+            if (IsStatic)
+                return;
+
             if (RosConnection.Instance.IsConnected
                 && Time.timeAsDouble > _lastTime + (1 / UpdateFrequency))
             {
@@ -184,6 +220,10 @@ namespace Marus.ROS
 
         protected async void SendMessage()
         {
+            if (_streamWriter == null || _isSending)
+                return;
+
+            _isSending = true;
             var tfOut = new Tf.TfFrame
             {
                 Header = new Header
@@ -197,7 +237,18 @@ namespace Marus.ROS
                 Rotation = _rotation.AsMsg(),
                 Address = address
             };
-            await _streamWriter.WriteAsync(tfOut);
+            try
+            {
+                await _streamWriter.WriteAsync(tfOut);
+            }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
+            {
+                ReopenStream();
+            }
+            finally
+            {
+                _isSending = false;
+            }
         }
     }
 }

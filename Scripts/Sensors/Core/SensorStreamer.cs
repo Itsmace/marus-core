@@ -53,6 +53,11 @@ namespace Marus.Sensors
         Task _awaitable;
         double _prevMsgTime;
 
+        public int QueueSize => _msgQueue.Count;
+        public int QueueFillRatio => (int)((_msgQueue.Count / (float)MessageQueueSize) * 100);
+
+        private int _droppedMessages = 0;
+
         /// <summary>
         /// A client instance used for streaming sensor readings
         /// </summary>
@@ -69,7 +74,9 @@ namespace Marus.Sensors
 
         volatile bool _killSendMsgsThread;
         Thread _sendMsgThread;
-        ConcurrentQueue<TMsg> _msgQueue;
+        private ConcurrentQueue<TMsg> _msgQueue;
+        private int _currentQueueSize = 0;
+        private object _queueLock = new object();
 
 
         /// <summary>
@@ -193,47 +200,76 @@ namespace Marus.Sensors
             {
                 var msg = ComposeMessage();
                 _prevMsgTime = nextMsgTime;
-                if (_msgQueue.Count == MessageQueueSize)
+                lock (_queueLock)
                 {
-                    // remove first element
-                    _msgQueue.TryDequeue(out _);
-                    Debug.Log($"Grpc Message overflow in {_sensor.name}");
+                    // Drop oldest until we have space
+                    int dropped = 0;
+                    while (_currentQueueSize >= MessageQueueSize)
+                    {
+                        if (_msgQueue.TryDequeue(out _))
+                        {
+                            _currentQueueSize--;
+                            dropped++;
+                        }
+                        else
+                            break;
+                    }
+                    if (dropped > 0)
+                    {
+                        _droppedMessages += dropped;
+                        Debug.LogWarning($"[{_sensor?.name}] Dropped {dropped} queued message(s) (queue full). Total dropped: {_droppedMessages}");
+                    }
+
+                    _msgQueue.Enqueue(msg);
+                    _currentQueueSize++;
                 }
-                _msgQueue.Enqueue(msg);
             }
         }
 
         private async void SendMessagesThread()
         {
-            int count = 0;
             var sw = new System.Diagnostics.Stopwatch();
             sw.Start();
             while (true)
             {
                 if (_killSendMsgsThread)
-                {
                     return;
+
+                if (_streamWriter == null)
+                {
+                    Thread.Sleep(100);
+                    continue;
                 }
 
-                while (_msgQueue.TryDequeue(out var msg))
+                while (true)
                 {
-                    await _streamWriter.WriteAsync(msg);
-                    count++;
+                    TMsg msg;
+
+                    lock (_queueLock)
+                    {
+                        if (!_msgQueue.TryDequeue(out msg))
+                            break;
+
+                        _currentQueueSize--;
+                    }
+
+                    try
+                    {
+                        await _streamWriter.WriteAsync(msg);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogWarning($"[{_sensor?.name}] gRPC write failed, message dropped: {e.Message}");
+                        break;
+                    }
                 }
+
                 var dt = 1000.0 / UpdateFrequency; // in ms
                 var sleepTime = dt - sw.ElapsedMilliseconds;
-                if (sleepTime > 1) // minimum is 1 miliseconds
-                {
+                if (sleepTime > 1)
                     Thread.Sleep((int)sleepTime);
-                }
 
-                if (sw.ElapsedMilliseconds > 5000)
-                {
-                    sw.Restart();
-                    // check real frequency
-                    // Debug.Log($"{Time.fixedTimeAsDouble}");
-                }
-
+                sw.Restart();
             }
         }
 

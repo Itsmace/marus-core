@@ -3,13 +3,13 @@
     "Name": "RS Ruby",
     "Type": 2,
     "Frequency": 10.0,
-    "FrameId": "lidar_frame",
+    "FrameId": "sc2/sc2_lidar_octomap_frame",
     "MaxRange": 230.0,
     "MinRange": 3.0,
     "HorizontalResolution": 2048,
-    "VerticalResolution": 128,
-    "HorizontalFieldOfView": 360.0,
-    "VerticalFieldOfView": 40.0,
+    "VerticalResolution": 1024,
+    "HorizontalFieldOfView": 270.0,
+    "VerticalFieldOfView": 180.0,
     "ChannelAngles": [
       -13.565,
       -1.09,
@@ -469,6 +469,20 @@
       8.0,
       11.0
     ],
+    "RayIntervals": []
+  },
+  {
+    "Name": "Seaclear Octomap",
+    "Type": 1,
+    "Frequency": 10.0,
+    "FrameId": "sc2/sc2_lidar_octomap_frame",
+    "MaxRange": 230.0,
+    "MinRange": 3.0,
+    "HorizontalResolution": 2048,
+    "VerticalResolution": 1024,
+    "HorizontalFieldOfView": 360.0,
+    "VerticalFieldOfView": 180.0,
+    "ChannelAngles": null,
     "RayIntervals": null
   }
 ]

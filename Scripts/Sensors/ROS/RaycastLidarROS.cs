@@ -47,7 +47,7 @@ namespace Marus.Sensors
             PointCloud _pointCloud = new PointCloud();
             foreach (Vector3 point in pointcloud)
             {
-                var tmp = TfExtensions.Unity2Map(point);
+                var tmp = TfExtensions.Unity2Body(point);
                 Geometry.Point p = new Geometry.Point()
                 {
                     X = tmp.x,

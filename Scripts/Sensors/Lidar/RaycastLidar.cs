@@ -31,6 +31,9 @@ namespace Marus.Sensors
     /// </summary>
     public class RaycastLidar : SensorBase
     {
+
+        // Disable config mode
+        public bool UseConfig = false; 
         /// <summary>
         /// Number of horizontal rays
         /// </summary>
@@ -83,48 +86,76 @@ namespace Marus.Sensors
         [HideInInspector]
         private Dictionary<int, int> colliderLayer;
 
+        public LayerMask raycastMask;
         public LayerMask blackHoleLayers;
 
         void Start()
         {
-            int totalRays = WidthRes * HeightRes;
             colliderLayer = new Dictionary<int, int>();
 
-            if(blackHoleLayers != 0)
+            if (blackHoleLayers != 0)
             {
                 GameObject[] objects = Helpers.FindGameObjectsInLayerMask(blackHoleLayers);
 
                 foreach (var obj in objects)
                 {
                     Collider instId = obj.GetComponent<Collider>();
-                    if(instId)
+                    if (instId)
                     {
-                        colliderLayer.Add(instId.GetInstanceID(),instId.gameObject.layer);
+                        colliderLayer.Add(instId.GetInstanceID(), instId.gameObject.layer);
                     }
                 }
             }
 
             _saver = GetComponent<PointCloudSegmentationSaver>();
-            saverExists = _saver is not null && _saver.isActiveAndEnabled == true;
+            saverExists = _saver is not null && _saver.isActiveAndEnabled;
+
+            // Apply config ONLY if enabled
+            if (UseConfig && Configs != null && Configs.Count > 0)
+            {
+                ApplyLidarConfig();
+            }
+
+            // ALWAYS initialize rays first
             InitializeRayArray();
+
+            // REAL number of rays
+            int totalRays = _rayAngles.Length;
+
+            // Stop old coroutine and dispose old helper before re-allocating
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+                _coroutine = null;
+            }
+            _raycastHelper?.Dispose();
+
+            if (Points.IsCreated) Points.Dispose();
+            if (Readings.IsCreated) Readings.Dispose();
+
             Points = new NativeArray<Vector3>(totalRays, Allocator.Persistent);
             Readings = new NativeArray<LidarReading>(totalRays, Allocator.Persistent);
 
             var directionsLocal = RaycastJobHelper.CalculateRayDirections(_rayAngles);
-            _raycastHelper = new RaycastJobHelper<LidarReading>(gameObject, 
-                directionsLocal, 
-                OnLidarHit, 
-                OnFinish, 
-                maxDistance:MaxDistance, 
-                minDistance:MinDistance,
-                sampleFrequency:SampleFrequency);
+
+            _raycastHelper = new RaycastJobHelper<LidarReading>(
+                gameObject,
+                directionsLocal,
+                OnLidarHit,
+                OnFinish,
+                maxDistance: MaxDistance,
+                minDistance: MinDistance,
+                sampleFrequency: SampleFrequency,
+                layerMask: raycastMask
+            );
 
             if (ParticleMaterial == null)
                 ParticleMaterial = PointCloudManager.FindMaterial("PointMaterial");
             if (pointCloudShader == null)
                 pointCloudShader = PointCloudManager.FindComputeShader("PointCloudCS");
 
-            _pointCloudManager = PointCloudManager.CreatePointCloud(gameObject, name + "_PointCloud", totalRays, ParticleMaterial, pointCloudShader);
+            _pointCloudManager = PointCloudManager.CreatePointCloud(gameObject,name + "_PointCloud", totalRays, ParticleMaterial, pointCloudShader);
+
             _coroutine = StartCoroutine(_raycastHelper.RaycastInLoop());
 
         }
@@ -139,7 +170,6 @@ namespace Marus.Sensors
         {
             points.CopyTo(this.Points);
             readings.CopyTo(this.Readings);
-            Log(new {points});
             hasData = true;
         }
 
@@ -177,11 +207,15 @@ namespace Marus.Sensors
         /// </summary>
         public void ApplyLidarConfig()
         {
+            if (!UseConfig) return;   // 👈 HARD STOP
+
             if (_rayAngles.IsCreated)
             {
                 _rayAngles.Dispose();
             }
+
             var cfg = Configs[ConfigIndex];
+
             MaxDistance = cfg.MaxRange;
             MinDistance = cfg.MinRange;
             WidthRes = cfg.HorizontalResolution;
@@ -191,23 +225,18 @@ namespace Marus.Sensors
             SampleFrequency = cfg.Frequency;
             _rayType = cfg.Type;
             _rayIntervals = cfg.RayIntervals;
+
             if (cfg.Type == RayDefinitionType.Angles)
             {
                 HeightRes = cfg.ChannelAngles.Count;
             }
             else if (cfg.Type == RayDefinitionType.Intervals)
             {
-                if (_rayIntervals is null)
+                if (_rayIntervals != null && _rayIntervals.Count > 0)
                 {
-                    _rayIntervals = new List<RayInterval>();
-                }
-                else
-                {
-                    if (_rayIntervals.Count > 0)
-                    {
-                        HeightRes = _rayIntervals.Sum(x => x.NumberOfRays);
-                        VerticalFieldOfView = _rayIntervals.Last().EndingAngle - _rayIntervals.First().StartingAngle;
-                    }
+                    HeightRes = _rayIntervals.Sum(x => x.NumberOfRays);
+                    VerticalFieldOfView =
+                        _rayIntervals.Last().EndingAngle - _rayIntervals.First().StartingAngle;
                 }
             }
         }
@@ -218,29 +247,70 @@ namespace Marus.Sensors
         /// </summary>
         public void InitializeRayArray()
         {
-            var cfg = Configs[ConfigIndex];
-            if (cfg.Type == RayDefinitionType.Intervals)
+            if (_rayAngles.IsCreated) _rayAngles.Dispose();
+
+            if (UseConfig && Configs != null && Configs.Count > 0)
             {
-                var angles = RaycastJobHelper.InitVerticalAnglesFromIntervals(_rayIntervals, WidthRes, HorizontalFieldOfView);
-                _rayAngles = RaycastJobHelper.InitCustomRays(angles, cfg.HorizontalResolution, HorizontalFieldOfView);
+                var cfg = Configs[ConfigIndex];
+
+                if (cfg.Type == RayDefinitionType.Intervals)
+                {
+                    var angles = RaycastJobHelper.InitVerticalAnglesFromIntervals(
+                        _rayIntervals,
+                        WidthRes,
+                        HorizontalFieldOfView
+                    );
+
+                    _rayAngles = RaycastJobHelper.InitCustomRays(
+                        angles,
+                        cfg.HorizontalResolution,
+                        HorizontalFieldOfView
+                    );
+                }
+                else if (cfg.Type == RayDefinitionType.Uniform)
+                {
+                    _rayAngles = RaycastJobHelper.InitUniformRays(
+                        WidthRes,
+                        HeightRes,
+                        HorizontalFieldOfView,
+                        VerticalFieldOfView
+                    );
+                }
+                else if (cfg.Type == RayDefinitionType.Angles)
+                {
+                    HeightRes = cfg.ChannelAngles.Count;
+
+                    _rayAngles = RaycastJobHelper.InitCustomRays(
+                        cfg.ChannelAngles,
+                        cfg.HorizontalResolution,
+                        HorizontalFieldOfView
+                    );
+                }
             }
-            else if (cfg.Type == RayDefinitionType.Uniform)
+            else
             {
-                _rayAngles = RaycastJobHelper.InitUniformRays(WidthRes, HeightRes, HorizontalFieldOfView, VerticalFieldOfView);
-            }
-            else if (cfg.Type == RayDefinitionType.Angles)
-            {
-                HeightRes = cfg.ChannelAngles.Count;
-                _rayAngles = RaycastJobHelper.InitCustomRays(cfg.ChannelAngles, cfg.HorizontalResolution, HorizontalFieldOfView);
+                // PURE manual mode (no config interference)
+                _rayAngles = RaycastJobHelper.InitUniformRays(
+                    WidthRes,
+                    HeightRes,
+                    HorizontalFieldOfView,
+                    VerticalFieldOfView
+                );
             }
         }
 
         void OnDestroy()
         {
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+                _coroutine = null;
+            }
             _raycastHelper?.Dispose();
-            Points.Dispose();
-            Readings.Dispose();
-            _rayAngles.Dispose();
+
+            if (Points.IsCreated) Points.Dispose();
+            if (Readings.IsCreated) Readings.Dispose();
+            if (_rayAngles.IsCreated) _rayAngles.Dispose();
         }
     }
 

@@ -60,9 +60,16 @@ namespace Marus.Sensors
         Coroutine _coroutine;
         void Start()
         {
-
             int totalRays = Resolution;
 
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+                _coroutine = null;
+            }
+            _raycastHelper?.Dispose();
+
+            if (pointsCopy.IsCreated) pointsCopy.Dispose();
             pointsCopy = new NativeArray<Vector3>(totalRays, Allocator.Persistent);
 
             var directionsLocal = RaycastJobHelper.EvenlyDistributeRays(Resolution, 1, FieldOfView, 0);
@@ -70,7 +77,6 @@ namespace Marus.Sensors
 
             _pointCloudManager = PointCloudManager.CreatePointCloud(name + "_PointClout", totalRays, ParticleMaterial, pointCloudShader);
             _coroutine = StartCoroutine(_raycastHelper.RaycastInLoop());
-
         }
 
         protected override void SampleSensor()
@@ -86,8 +92,13 @@ namespace Marus.Sensors
 
         void OnDestroy()
         {
-            _raycastHelper.Dispose();
-            pointsCopy.Dispose();
+            if (_coroutine != null)
+            {
+                StopCoroutine(_coroutine);
+                _coroutine = null;
+            }
+            _raycastHelper?.Dispose();
+            if (pointsCopy.IsCreated) pointsCopy.Dispose();
         }
 
         public SonarReading OnSonarHit(RaycastHit hit, Vector3 direction, int i)

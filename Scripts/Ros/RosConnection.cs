@@ -79,6 +79,8 @@ namespace Marus.Networking
         volatile bool _isConnecting;
         public bool IsConnecting => _isConnecting;
 
+        volatile bool _healthCheckAlive;
+
         CancellationToken _cancellationToken;
         public CancellationToken CancellationToken => _cancellationToken;
 
@@ -164,15 +166,49 @@ namespace Marus.Networking
 
         IEnumerator WhileConnectionAwait()
         {
-            while (true)
+            while (!_connected)
             {
-                if (_connected)
+                if (!_isConnecting)
+                    Connect();
+                yield return new WaitForSeconds(connectionTimeout + 1);
+            }
+            OnRosConnected();
+            OnConnected?.Invoke(_streamingChannel);
+            StartCoroutine(ConnectionHealthCheckLoop());
+        }
+
+        IEnumerator ConnectionHealthCheckLoop()
+        {
+            const float checkInterval = 5f;
+            const int pingTimeoutSecs = 2;
+
+            while (_connected)
+            {
+                yield return new WaitForSeconds(checkInterval);
+                if (_isConnecting) continue;
+
+                _healthCheckAlive = false;
+                var t = new Thread(() =>
                 {
-                    OnRosConnected();
-                    OnConnected?.Invoke(_streamingChannel);
-                    break;
+                    try
+                    {
+                        var response = GetClient<PingClient>().Ping(
+                            new PingMsg(),
+                            deadline: DateTime.UtcNow.AddSeconds(pingTimeoutSecs));
+                        _healthCheckAlive = response.Value == 1;
+                    }
+                    catch { _healthCheckAlive = false; }
+                });
+                t.Start();
+                yield return new WaitForSeconds(pingTimeoutSecs + 1);
+
+                if (!_healthCheckAlive)
+                {
+                    Debug.Log("Lost connection to ROS Server, attempting reconnect...");
+                    _connected = false;
+                    StartCoroutine(WhileConnectionAwait());
+                    yield break;
                 }
-                yield return null;
             }
         }
 

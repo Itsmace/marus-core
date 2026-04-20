@@ -224,6 +224,8 @@ namespace Marus.Sensors
         private float _timeSinceLastSample;
         public float SampleFrequency;
 
+        private int _layerMask;
+
         Action<NativeArray<Vector3>, NativeArray<T>> _onFinishCallback;
         static Dictionary<int, Func<RaycastHit, Vector3, int, T>> _getResultFromHit;
 
@@ -231,7 +233,7 @@ namespace Marus.Sensors
         public RaycastJobHelper(GameObject obj, NativeArray<Vector3> directions,
                 Func<RaycastHit, Vector3, int, T> getResultFromHit,
                 Action<NativeArray<Vector3>, NativeArray<T>> onFinish,
-                float maxDistance=float.MaxValue, float minDistance=0, float sampleFrequency = 10)
+                float maxDistance=float.MaxValue, float minDistance=0, float sampleFrequency = 10, int layerMask = ~0)
 
         {
             var totalRays = directions.Length;
@@ -246,6 +248,7 @@ namespace Marus.Sensors
             _maxDistance = maxDistance;
             _minDistance = minDistance;
             SampleFrequency = sampleFrequency;
+            _layerMask = layerMask;
             _timeSinceLastSample = float.PositiveInfinity;
             InitializeGetResultFromHit(getResultFromHit);
             _onFinishCallback = onFinish;
@@ -258,7 +261,7 @@ namespace Marus.Sensors
             {
                 _getResultFromHit = new Dictionary<int, Func<RaycastHit, Vector3, int, T>>();
             }
-            _getResultFromHit.Add(_obj.GetInstanceID(), getResultFromHit);
+            _getResultFromHit[_obj.GetInstanceID()] = getResultFromHit;
         }
 
         public void RaycastSync()
@@ -358,6 +361,7 @@ namespace Marus.Sensors
             commandsJob.directions = _directionsLocal;
             commandsJob.position = transform.position;
             commandsJob.rotation = transform.rotation;
+            commandsJob.layerMask = _layerMask;
             var commandsJobHandle = commandsJob.Schedule(_directionsLocal.Length, 10);
 
             return RaycastCommand.ScheduleBatch(_commands, _hits, 10, commandsJobHandle);
@@ -382,11 +386,14 @@ namespace Marus.Sensors
             [ReadOnly]
             public float maxDistance;
 
+            [ReadOnly]
+            public int layerMask;
+
             public NativeArray<RaycastCommand> commands;
 
             public void Execute(int i)
             {
-                commands[i] = new RaycastCommand(position, rotation*directions[i], maxDistance);
+                commands[i] = new RaycastCommand(position, rotation*directions[i], maxDistance, layerMask);
             }
         }
 
@@ -405,6 +412,7 @@ namespace Marus.Sensors
 
             public void Execute(int i)
             {
+
                 if (hits[i].distance < minDistance)
                 {
                     points[i] = Vector3.zero;
