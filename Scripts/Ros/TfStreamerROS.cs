@@ -152,8 +152,17 @@ namespace Marus.ROS
             if (ParentFrameId == "")
                 ParentFrameId = "map";
 
+            RosConnection.Instance.OnConnected += OnRosReconnected;
             StartCoroutine(InitWhenConnected());
         }
+
+        void OnDestroy()
+        {
+            if (RosConnection.HasInstance)
+                RosConnection.Instance.OnConnected -= OnRosReconnected;
+        }
+
+        void OnRosReconnected(Channel _) => ReopenStream();
 
         private IEnumerator InitWhenConnected()
         {

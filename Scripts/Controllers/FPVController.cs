@@ -29,9 +29,6 @@ public class FPVController : MonoBehaviour
     Rigidbody _rigidBody;
     
     Vector3 moveDirection = Vector3.zero;
-    float rotationX = 0;
-    float rotationY = 0;
-    
     float surfaceLevel = 0;
     
     public bool allowSidewayMotion = false;

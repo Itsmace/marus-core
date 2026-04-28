@@ -239,7 +239,7 @@ namespace Marus.Sensors
             }
             else
             {
-                gameObject.active = false;
+                gameObject.SetActive(false);
                 return;
             }
         }
@@ -344,7 +344,7 @@ namespace Marus.Sensors
         {
             Color pixel;
             Color annPixel;
-            int xCoordinate, yCoordinate;
+            int yCoordinate;
             float[] yIntensity = new float[imageHeight];
             for (var x = 0; x < WidthRes; x++)
             {

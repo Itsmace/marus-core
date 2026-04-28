@@ -278,18 +278,30 @@ namespace Marus.Sensors
         /// Main method to be called for streaming the sensor
         /// It must be called before any other function from this base class
         /// </summary>
+        Func<Grpc.Core.Metadata, System.DateTime?, System.Threading.CancellationToken, AsyncClientStreamingCall<TMsg, Std.Empty>> _streamingFn;
+
         protected void StreamSensor(SensorBase sensor,
-            // AsyncClientStreamingCall<TMsg, Std.Empty> streamingCall
             Func<Grpc.Core.Metadata, System.DateTime?, System.Threading.CancellationToken, AsyncClientStreamingCall<TMsg, Std.Empty>> streamingFn)
         {
-            streamHandle = streamingFn(null, null, RosConnection.Instance.CancellationToken);
+            _streamingFn = streamingFn;
             _sensor = sensor;
+            OpenStream();
+            RosConnection.Instance.OnConnected += OnRosReconnected;
         }
+
+        void OpenStream()
+        {
+            streamHandle = _streamingFn(null, null, RosConnection.Instance.CancellationToken);
+        }
+
+        void OnRosReconnected(Channel _) => OpenStream();
 
         private void OnDisable()
         {
+            if (RosConnection.HasInstance)
+                RosConnection.Instance.OnConnected -= OnRosReconnected;
             _killSendMsgsThread = true;
-            _sendMsgThread.Join();
+            _sendMsgThread?.Join();
             _sendMsgThread = null;
         }
 

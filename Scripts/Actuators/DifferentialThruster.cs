@@ -24,7 +24,6 @@ namespace Marus.Actuators
         public float AngleLimit = 90;
         public float DiffLimit = 30;
         public ThrusterAsset ThrusterAsset;
-        float _currentAngle;
         float _angleRef = 0.0f;
         const float k = 1 / 90f;
         float LastForceRequest;
@@ -56,7 +55,6 @@ namespace Marus.Actuators
 
         void Start()
         {
-            _currentAngle = 0;
             _logger = DataLogger.Instance.GetLogger<LogRecord>($"{vehicle.transform.name}/{name}");
         }
 

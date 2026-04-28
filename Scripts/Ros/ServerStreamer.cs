@@ -79,7 +79,7 @@ namespace Marus.Networking
         public void StopStream()
         {
             IsStreaming = false;
-            _streamHandle.Dispose();
+            _streamHandle?.Dispose();
         }
 
         /// <summary>
@@ -92,14 +92,17 @@ namespace Marus.Networking
             {
                 Thread.Sleep(1000);
             }
-            // invoke rpc call
             var stream = _streamHandle.ResponseStream;
-
-            while (await stream.MoveNext(RosConnection.Instance.CancellationToken))
+            try
             {
-                var current = stream.Current;
-                _responseBuffer.Enqueue(current);
+                while (await stream.MoveNext(RosConnection.Instance.CancellationToken))
+                {
+                    var current = stream.Current;
+                    _responseBuffer.Enqueue(current);
+                }
             }
+            catch (OperationCanceledException) { }
+            catch (RpcException e) when (e.StatusCode == StatusCode.Cancelled) { }
         }
 
         /// <summary>

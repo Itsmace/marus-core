@@ -98,7 +98,6 @@ namespace Marus.ObjectAnnotation
 
         Sonar3D sonar;
         float _lastSave = 0;
-        int counter;
 
         [HideInInspector]
         public Dictionary<int, (int, int)> objectClassesAndInstances;
@@ -117,7 +116,6 @@ namespace Marus.ObjectAnnotation
             _ratios.Sort(Comparer<Tuple<int, string>>.Default);
             _ratios.Reverse();
 
-            counter = 0;
             int idx = 1;
             int classIdx = 1;
 

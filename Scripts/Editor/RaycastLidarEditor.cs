@@ -32,7 +32,6 @@ namespace Marus.Sensors
     {
         List<LidarConfig> Configs = null;
         string[] _choices;
-        int _confingIndex = 0;
         int _oldConfigIndex = 0;
         RaycastLidar lidarObj;
         bool showConfig = false;

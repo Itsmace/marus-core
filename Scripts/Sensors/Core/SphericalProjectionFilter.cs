@@ -39,7 +39,6 @@ namespace Marus.Sensors.Core
 
         // There are unknown problems with gpu read and write in multiple kernels to the same buffer
         // Fix is to have separate buffers for read and write. Read - GPU reads from; Write - GPU writes to
-        private string projectionFilterBufferRead = "projectionFilterBufferRead";
         private string projectionFilterBuffer = "projectionFilterBuffer";
         private string projectionFilterDebug = "projectionFilterDebug";
         private string projectionFilterKernel = "projectionFilterKernel";

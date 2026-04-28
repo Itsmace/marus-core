@@ -25,6 +25,13 @@ namespace Marus.Utils
     public class Singleton<T> : MonoBehaviour where T : Component
     {
         protected static T instance;
+
+        /// <summary>
+        /// True when the singleton instance already exists. Use this in OnDestroy/OnDisable
+        /// before accessing Instance to avoid creating a new GameObject during teardown.
+        /// </summary>
+        public static bool HasInstance => instance != null;
+
         public static T Instance
         {
             get
@@ -51,6 +58,11 @@ namespace Marus.Utils
 
         protected virtual void Initialize()
         {
+        }
+
+        protected virtual void OnDestroy()
+        {
+            instance = null;
         }
     }
 }

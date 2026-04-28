@@ -38,7 +38,7 @@ public class MeshColliderUpdate : MonoBehaviour
     }
 
     SkinnedMeshRenderer meshRenderer;
-    MeshCollider collider;
+    new MeshCollider collider;
 
     public void UpdateCollider()
     {

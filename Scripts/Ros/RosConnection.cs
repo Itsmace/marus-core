@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Grpc.Core;
 using UnityEngine;
 using System.Threading;
@@ -81,6 +82,9 @@ namespace Marus.Networking
 
         volatile bool _healthCheckAlive;
 
+        int _consecutiveFailures = 0;
+        const int MaxFailuresBeforeChannelRecreation = 5;
+
         CancellationToken _cancellationToken;
         public CancellationToken CancellationToken => _cancellationToken;
 
@@ -146,10 +150,18 @@ namespace Marus.Networking
                 _isConnecting = true;
                 var t = new Thread(() =>
                 {
-                    _connected = TryConnect();
-                    _isConnecting = false;
-                    // maybe add what to do after failed connection
-                    // maybe ping server repeatedly
+                    try
+                    {
+                        _connected = TryConnect();
+                        if (_connected)
+                            _consecutiveFailures = 0;
+                        else
+                            _consecutiveFailures++;
+                    }
+                    finally
+                    {
+                        _isConnecting = false;
+                    }
                 });
                 t.Start();
             }
@@ -169,12 +181,36 @@ namespace Marus.Networking
             while (!_connected)
             {
                 if (!_isConnecting)
+                {
+                    if (_consecutiveFailures >= MaxFailuresBeforeChannelRecreation)
+                    {
+                        RecreateChannel();
+                        _consecutiveFailures = 0;
+                    }
                     Connect();
+                }
                 yield return new WaitForSeconds(connectionTimeout + 1);
             }
             OnRosConnected();
             OnConnected?.Invoke(_streamingChannel);
             StartCoroutine(ConnectionHealthCheckLoop());
+        }
+
+        void RecreateChannel()
+        {
+            Debug.Log("Recreating gRPC channel after repeated connection failures...");
+            var oldChannel = _streamingChannel;
+            Task.Run(async () => { try { await oldChannel.ShutdownAsync(); } catch { } });
+
+            var options = new List<ChannelOption>
+            {
+                new ChannelOption(ChannelOptions.MaxSendMessageLength, 1024*1024*100),
+                new ChannelOption(ChannelOptions.MaxReceiveMessageLength, 1024*1024*100),
+            };
+            _streamingChannel = new Channel(serverIP, serverPort, ChannelCredentials.Insecure, options);
+            _cancellationToken = _streamingChannel.ShutdownToken;
+            InitializeClients();
+            Debug.Log("gRPC channel recreated.");
         }
 
         IEnumerator ConnectionHealthCheckLoop()
@@ -325,16 +361,15 @@ namespace Marus.Networking
             return false;
         }
 
-        async void OnDisable()
+        void OnDisable()
         {
             if (_streamingChannel == null)
                 return;
 
             Debug.Log("Shutting down gRPC channel...");
-
             try
             {
-                await _streamingChannel.ShutdownAsync();
+                _streamingChannel.ShutdownAsync().Wait(TimeSpan.FromSeconds(3));
                 Debug.Log("gRPC shutdown successful.");
             }
             catch (Exception e)

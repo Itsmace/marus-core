@@ -63,6 +63,15 @@ namespace Marus.Networking
                 cancellationToken: RosConnection.Instance.CancellationToken));
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (RosConnection.HasInstance)
+                RosConnection.Instance.OnConnected -= OnConnected;
+            streamer1?.StopStream();
+            streamer2?.StopStream();
+        }
+
         void Update()
         {
             streamer1.HandleNewMessages();

@@ -216,7 +216,6 @@ namespace Marus.Sensors
         JobHandle _raycastHandle;
         JobHandle _readbackHandle;
         bool _readbackInProgress;
-        bool _hasData;
         GameObject _obj;
         private float _maxDistance;
         private float _minDistance;
@@ -240,7 +239,6 @@ namespace Marus.Sensors
             _obj = obj;
             _directionsLocal = directions;
             _directionsGlobal = new NativeArray<Vector3>(totalRays, Allocator.Persistent);
-            _hasData = false;
             _commands = new NativeArray<RaycastCommand>(totalRays, Allocator.Persistent);
             _hits = new NativeArray<RaycastHit>(totalRays, Allocator.Persistent);
             _results = new NativeArray<T>(totalRays, Allocator.Persistent);
@@ -278,7 +276,6 @@ namespace Marus.Sensors
                 _readbackHandle.Complete();
                 _readbackInProgress = false;
                 _onFinishCallback(_points, _results);
-                _hasData = true;
             }
         }
 
@@ -309,7 +306,6 @@ namespace Marus.Sensors
 
                     _readbackInProgress = false;
                     _onFinishCallback(_points, _results);
-                    _hasData = true;
                 }
                 yield return null;
             }
@@ -393,7 +389,7 @@ namespace Marus.Sensors
 
             public void Execute(int i)
             {
-                commands[i] = new RaycastCommand(position, rotation*directions[i], maxDistance, layerMask);
+                commands[i] = new RaycastCommand(position, rotation*directions[i], new QueryParameters(layerMask), maxDistance);
             }
         }
 

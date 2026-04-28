@@ -28,7 +28,6 @@ public class WhaleController : MonoBehaviour
 		public float rotationSpeed = 2;
 		private Vector3 currentEulerAngles;
 		private float timer = 0;
-		private int mod = 1;
 		private float period;
 		private float distanceDelta;
 		RaycastHit hit;
