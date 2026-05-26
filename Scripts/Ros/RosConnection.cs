@@ -356,7 +356,7 @@ namespace Marus.Networking
             }
             catch (RpcException e)
             {
-                Debug.Log($"Could not establish a connection to ROS Server. {e.Message}");
+                Debug.Log($"Could not connect to ROS Server ({e.Status.Detail}). Retrying...");
             }
             return false;
         }

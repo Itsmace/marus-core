@@ -23,7 +23,6 @@ namespace Marus.Sensors.Primitive
     /// <summary>
     /// Imu sensor implementation
     /// </summary>
-    [RequireComponent(typeof(Rigidbody))]
     public class ImuSensor : SensorBase
     {
         public bool withGravity = true;
@@ -53,15 +52,13 @@ namespace Marus.Sensors.Primitive
         public NoiseParameters OrientationNoise;
         [ReadOnly] public Vector3 EulerAngles;
         [ReadOnly] public Quaternion Orientation;
-        private Rigidbody rb;
+        private Rigidbody veh_rb;
         private Vector3 lastVelocity = Vector3.zero;
         private double _lastSampleTime;
 
 
         new void Reset()
         {
-            rb = GetComponent<Rigidbody>();
-
             base.Reset();
             UpdateVehicle();
         }
@@ -71,53 +68,43 @@ namespace Marus.Sensors.Primitive
             base.UpdateVehicle();
 
             var veh = vehicle;
+            veh_rb = veh.GetComponent<Rigidbody>();
 
-            // get vehicle rigidbody (either this gameObject or vehicle tag)
-            // This is needed for IMU to work as expected
-            Rigidbody veh_rb = veh.GetComponent<Rigidbody>();
-
-            // if vehicle tag not found or no rigidbody found on tagged vehicle
-            // find top parent with rigidbody
-            if(veh == transform || (veh_rb is null))
-            {
+            if (veh == transform || veh_rb is null)
                 veh_rb = Helpers.GetComponentInParents<Rigidbody>(veh.parent?.gameObject);
-            }
 
-            // if parent rigidbody found, attach fixed joint to it
-            if(veh_rb)
-            {
-                // attach fixed joint to it
-                // This is needed for IMU to work as expected
-                FixedJoint fj = gameObject.GetComponent<FixedJoint>();
-                if(!fj) fj = gameObject.AddComponent<FixedJoint>();
-                fj.connectedBody = veh_rb;
-            }
+            if (veh_rb == null)
+                Debug.LogWarning($"ImuSensor on {gameObject.name}: no vehicle Rigidbody found.");
         }
 
         void Start()
         {
-            rb = GetComponent<Rigidbody>();
+            UpdateVehicle();
         }
 
         protected override void SampleSensor()
         {
+            if (veh_rb == null) return;
 
             double timeElapsed = Time.timeAsDouble - _lastSampleTime;
             _lastSampleTime = Time.timeAsDouble;
 
-            localVelocity = rb.transform.InverseTransformVector(rb.velocity);
+            // lever-arm: velocity at IMU position = v_CoM + ω × r
+            Vector3 r = transform.position - veh_rb.worldCenterOfMass;
+            Vector3 worldVelocity = veh_rb.velocity + Vector3.Cross(veh_rb.angularVelocity, r);
+            localVelocity = transform.InverseTransformVector(worldVelocity);
             localVelocity[0]+=Noise.Sample(AccelerometerNoise);
             localVelocity[1]+=Noise.Sample(AccelerometerNoise);
             localVelocity[2]+=Noise.Sample(AccelerometerNoise);
             if (timeElapsed > 0)
                 linearAcceleration = (localVelocity - lastVelocity) / (float)timeElapsed;
 
-            angularVelocity = rb.angularVelocity;
+            angularVelocity = veh_rb.angularVelocity;
             angularVelocity[0]+=Noise.Sample(GyroNoise);
             angularVelocity[1]+=Noise.Sample(GyroNoise);
             angularVelocity[2]+=Noise.Sample(GyroNoise);
 
-            eulerAngles = rb.rotation.eulerAngles;
+            eulerAngles = transform.rotation.eulerAngles;
             eulerAngles.x += Noise.Sample(OrientationNoise);
             eulerAngles.y += Noise.Sample(OrientationNoise);
             eulerAngles.z += Noise.Sample(OrientationNoise);
@@ -126,7 +113,7 @@ namespace Marus.Sensors.Primitive
             lastVelocity = localVelocity;
 
             if (withGravity)
-                linearAcceleration -= rb.transform.InverseTransformVector(UnityEngine.Physics.gravity);
+                linearAcceleration -= transform.InverseTransformVector(UnityEngine.Physics.gravity);
 
             if (debug)
             {

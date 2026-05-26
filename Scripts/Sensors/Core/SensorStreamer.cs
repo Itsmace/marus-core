@@ -291,7 +291,15 @@ namespace Marus.Sensors
 
         void OpenStream()
         {
-            streamHandle = _streamingFn(null, null, RosConnection.Instance.CancellationToken);
+            try
+            {
+                streamHandle = _streamingFn(null, null, RosConnection.Instance.CancellationToken);
+            }
+            catch (ObjectDisposedException)
+            {
+                Debug.LogWarning($"[gRPC] {_sensor?.name}: channel was recreated, stream will reopen on next reconnect.");
+                streamHandle = null;
+            }
         }
 
         void OnRosReconnected(Channel _) => OpenStream();
