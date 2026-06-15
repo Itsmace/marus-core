@@ -311,6 +311,16 @@ namespace Marus.Sensors
             _killSendMsgsThread = true;
             _sendMsgThread?.Join();
             _sendMsgThread = null;
+
+            // Send end-of-stream to the server so it doesn't accumulate dangling handlers
+            // across play mode cycles. Must happen before RosConnection shuts down the channel
+            // (execution order 200 > -1 guarantees that ordering).
+            if (streamHandle != null)
+            {
+                try { streamHandle.RequestStream.CompleteAsync().Wait(TimeSpan.FromSeconds(2)); }
+                catch { }
+                finally { streamHandle = null; }
+            }
         }
 
         protected abstract TMsg ComposeMessage();
