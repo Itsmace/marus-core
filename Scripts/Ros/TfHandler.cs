@@ -14,7 +14,7 @@
 
 using Grpc.Core;
 using UnityEngine;
-using System.Linq;
+using System.Collections.Generic;
 using Marus.Core;
 using static Tf.Tf;
 
@@ -36,6 +36,9 @@ namespace Marus.Networking
         private GameObject _tf;
         private GeographicFrame _originGeoFrame;
         public GeographicFrame OriginGeoFrame => _originGeoFrame;
+
+        private readonly Dictionary<string, GameObject> _frameObjects = new Dictionary<string, GameObject>();
+        private readonly Dictionary<string, TfFrame> _frameByChild = new Dictionary<string, TfFrame>();
 
 
         public bool StreamFrames = true;
@@ -114,29 +117,31 @@ namespace Marus.Networking
         private void UpdateTf(TfFrameList frameList)
         {
             var rosConn = RosConnection.Instance;
-            foreach (var frame in frameList.Frames)
+            var frames = frameList.Frames;
+
+            _frameByChild.Clear();
+            foreach (var f in frames)
+                _frameByChild[f.ChildFrameId] = f;
+
+            foreach (var frame in frames)
             {
-                if (frame.ChildFrameId == rosConn.OriginFrameName) 
+                if (frame.ChildFrameId == rosConn.OriginFrameName)
                     continue;
 
                 var frameObj = GetOrCreateGameObjectForFrame(frame);
 
-                // set parent if it is not already set
-                if (frameObj.transform.parent == null 
+                if (frameObj.transform.parent == null
                     || frameObj.transform.parent.name != frame.FrameId)
                 {
-                    var parentFrame = frameList.Frames.FirstOrDefault(x => x.ChildFrameId == frame.FrameId);
-                    if (parentFrame != null)
+                    if (_frameByChild.TryGetValue(frame.FrameId, out var parentFrame))
                     {
                         var parentFrameObj = GetOrCreateGameObjectForFrame(parentFrame);
                         frameObj.transform.parent = parentFrameObj.transform;
                     }
                 }
 
-                var position = frame.Translation.AsUnity().Map2Unity();
-                var rotation = frame.Rotation.AsUnity().Map2Unity();
-                frameObj.transform.localPosition = position;
-                frameObj.transform.localRotation = rotation;
+                frameObj.transform.localPosition = frame.Translation.AsUnity().Map2Unity();
+                frameObj.transform.localRotation = frame.Rotation.AsUnity().Map2Unity();
             }
         }
 
@@ -163,6 +168,9 @@ namespace Marus.Networking
 
         private GameObject GetOrCreateGameObjectForFrame(TfFrame frame)
         {
+            if (_frameObjects.TryGetValue(frame.ChildFrameId, out var cached))
+                return cached;
+
             var obj = Helpers.FindGameObjectInChildren(frame.ChildFrameId, _tf);
             if (obj == null)
             {
@@ -173,6 +181,7 @@ namespace Marus.Networking
                     Visualizer.Instance.AddTransform(obj.transform, "tf");
                 }
             }
+            _frameObjects[frame.ChildFrameId] = obj;
             return obj;
         }
     }

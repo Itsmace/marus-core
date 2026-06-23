@@ -20,8 +20,11 @@ using Grpc.Core;
 using static Tf.Tf;
 using Marus.Utils;
 using Marus.CustomInspector;
+using System;
 using System.Collections;
 using System.Threading.Tasks;
+using mVector3 = Geometry.Vector3;
+using mQuaternion = Geometry.Quaternion;
 
 namespace Marus.ROS
 {
@@ -115,6 +118,12 @@ namespace Marus.ROS
         Quaternion _rotation;
         Vector3 _translation;
 
+        private Tf.TfFrame _cachedTfOut;
+        private Header _cachedHeader;
+        private mVector3 _cachedTranslation;
+        private mQuaternion _cachedRotation;
+        private Action<Task> _onWriteComplete;
+
         /// <summary>
         /// A client instance used for streaming tf messages
         /// </summary>
@@ -151,6 +160,25 @@ namespace Marus.ROS
             address = IsStatic ? "/tf_static" : "/tf";
             if (ParentFrameId == "")
                 ParentFrameId = "map";
+
+            _cachedHeader = new Header { FrameId = FrameId };
+            _cachedTranslation = new mVector3();
+            _cachedRotation = new mQuaternion();
+            _cachedTfOut = new Tf.TfFrame
+            {
+                Header = _cachedHeader,
+                FrameId = ParentFrameId,
+                ChildFrameId = FrameId,
+                Translation = _cachedTranslation,
+                Rotation = _cachedRotation,
+                Address = address
+            };
+            _onWriteComplete = t => {
+                if (t.IsFaulted && t.Exception?.InnerException is RpcException e
+                    && e.StatusCode == StatusCode.Unavailable)
+                    ReopenStream();
+                _isSending = false;
+            };
 
             RosConnection.Instance.OnConnected += OnRosReconnected;
             StartCoroutine(InitWhenConnected());
@@ -227,36 +255,32 @@ namespace Marus.ROS
             }
         }
 
-        protected async void SendMessage()
+        protected void SendMessage()
         {
             if (_streamWriter == null || _isSending)
                 return;
 
             _isSending = true;
-            var tfOut = new Tf.TfFrame
+            _cachedHeader.Timestamp = TimeHandler.Instance.TimeDouble;
+            _cachedTranslation.X = _translation.x;
+            _cachedTranslation.Y = _translation.y;
+            _cachedTranslation.Z = _translation.z;
+            _cachedRotation.X = _rotation.x;
+            _cachedRotation.Y = _rotation.y;
+            _cachedRotation.Z = _rotation.z;
+            _cachedRotation.W = _rotation.w;
+
+            var task = _streamWriter.WriteAsync(_cachedTfOut);
+            if (task.IsCompleted)
             {
-                Header = new Header
-                {
-                    FrameId = FrameId,
-                    Timestamp = TimeHandler.Instance.TimeDouble
-                },
-                FrameId = ParentFrameId,
-                ChildFrameId = FrameId,
-                Translation = _translation.AsMsg(),
-                Rotation = _rotation.AsMsg(),
-                Address = address
-            };
-            try
-            {
-                await _streamWriter.WriteAsync(tfOut);
+                if (task.IsFaulted)
+                    _onWriteComplete(task);
+                else
+                    _isSending = false;
             }
-            catch (RpcException e) when (e.StatusCode == StatusCode.Unavailable)
+            else
             {
-                ReopenStream();
-            }
-            finally
-            {
-                _isSending = false;
+                task.ContinueWith(_onWriteComplete);
             }
         }
     }

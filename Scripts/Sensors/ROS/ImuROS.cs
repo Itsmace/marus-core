@@ -29,36 +29,58 @@ namespace Marus.Sensors.Primitive
     public class ImuROS : SensorStreamer<SensorStreamingClient, ImuStreamingRequest>
     {
         ImuSensor sensor;
+
+        private ImuStreamingRequest _cachedRequest;
+        private Imu _cachedImu;
+        private Header _cachedHeader;
+        private Geometry.Quaternion _cachedOrientation;
+        private Geometry.Vector3 _cachedAngularVelocity;
+        private Geometry.Vector3 _cachedLinearAcceleration;
+
         new void Start()
         {
             sensor = GetComponent<ImuSensor>();
-            StreamSensor(sensor,
-                streamingClient.StreamImuSensor);
-            base.Start();
+            StreamSensor(sensor, streamingClient.StreamImuSensor);
+            base.Start();  // sets address via SetAddresSufix
+
+            _cachedHeader = new Header { FrameId = sensor.frameId };
+            _cachedOrientation = new Geometry.Quaternion();
+            _cachedAngularVelocity = new Geometry.Vector3();
+            _cachedLinearAcceleration = new Geometry.Vector3();
+            _cachedImu = new Imu
+            {
+                Header = _cachedHeader,
+                Orientation = _cachedOrientation,
+                AngularVelocity = _cachedAngularVelocity,
+                LinearAcceleration = _cachedLinearAcceleration,
+            };
+            _cachedImu.OrientationCovariance.AddRange(sensor.orientationCovariance);
+            _cachedImu.LinearAccelerationCovariance.AddRange(sensor.linearAccelerationCovariance);
+            _cachedImu.AngularVelocityCovariance.AddRange(sensor.angularVelocityCovariance);
+            _cachedRequest = new ImuStreamingRequest { Data = _cachedImu, Address = address };
         }
 
         protected override ImuStreamingRequest ComposeMessage()
         {
-            var imuOut = new Imu()
-            {
-                Header = new Header
-                {
-                    FrameId = sensor.frameId,
-                    Timestamp = TimeHandler.Instance.TimeDouble
-                },
-                Orientation = sensor.orientation.Unity2Map().AsMsg(),
-                AngularVelocity = (-sensor.angularVelocity).Unity2Body().AsMsg(),
-                LinearAcceleration = sensor.linearAcceleration.Unity2Body().AsMsg(),
-            };
-            imuOut.OrientationCovariance.AddRange(sensor.orientationCovariance);
-            imuOut.LinearAccelerationCovariance.AddRange(sensor.linearAccelerationCovariance);
-            imuOut.AngularVelocityCovariance.AddRange(sensor.angularVelocityCovariance);
+            _cachedHeader.Timestamp = TimeHandler.Instance.TimeDouble;
 
-            return new ImuStreamingRequest
-            {
-                Data = imuOut,
-                Address = address
-            };
+            var ori = sensor.orientation.Unity2Map();
+            _cachedOrientation.X = ori.x;
+            _cachedOrientation.Y = ori.y;
+            _cachedOrientation.Z = ori.z;
+            _cachedOrientation.W = ori.w;
+
+            var angVel = (-sensor.angularVelocity).Unity2Body();
+            _cachedAngularVelocity.X = angVel.x;
+            _cachedAngularVelocity.Y = angVel.y;
+            _cachedAngularVelocity.Z = angVel.z;
+
+            var linAcc = sensor.linearAcceleration.Unity2Body();
+            _cachedLinearAcceleration.X = linAcc.x;
+            _cachedLinearAcceleration.Y = linAcc.y;
+            _cachedLinearAcceleration.Z = linAcc.z;
+
+            return _cachedRequest;
         }
     }
 }
