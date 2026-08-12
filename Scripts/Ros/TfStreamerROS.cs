@@ -249,9 +249,15 @@ namespace Marus.ROS
             else
             {
                 // if no parent is assigned, assume it is global position and transform to ENU frame
-                _rotation =  transform.rotation.Unity2Map() * new Quaternion(0,0, 1/Mathf.Sqrt(2), 1/Mathf.Sqrt(2));
+                //
+                // NOTE (Fork): this used to post-multiply by Quaternion(0,0,1/sqrt2,1/sqrt2),
+                // a hardcoded +90 deg yaw. That compensated for upstream Marus assuming a
+                // Z-forward vehicle model. The SC2 ROV is X-forward (Unity X = East), so the
+                // extra rotation put the vehicle's TF orientation 90 deg away from the IMU's,
+                // which uses Unity2Map alone. Measured: TF reported 90.61 deg while the IMU
+                // reported 0.58 deg for an unrotated (East-facing) ROV. Removed so both agree.
+                _rotation = transform.rotation.Unity2Map();
                 _translation = transform.position.Unity2Map();
-
             }
         }
 

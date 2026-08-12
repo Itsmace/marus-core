@@ -43,15 +43,25 @@ namespace Marus.Core
         }
         
         /// Use this conversion when translating local coordinates from Unity to ROS Forward-Left-Up body frames.
+        ///
+        /// NOTE (SC2 fork): upstream Marus assumed the vehicle model's local Z is forward
+        /// (Unity's default convention). The SC2 ROV is modelled X-forward / Y-up, so the
+        /// original permutation (z, -x, y) picked the wrong axis as ROS "forward" and put a
+        /// systematic 90 deg yaw error on every sensor's data. With X-forward / Y-up, and the
+        /// determinant fixed at -1 by the Unity(left-handed) -> ROS(right-handed) flip, the
+        /// mapping is forced to: ROS x = unity x (forward), y = unity z (left), z = unity y (up).
+        /// That makes it identical to Unity2Map, which is expected: the ROV's local axes are
+        /// laid out the same way as the world axes (X forward/East, Y up, Z left/North).
         public static Vector3 Unity2Body(this Vector3 vector3)
         {
-            return new Vector3(vector3.z, -vector3.x, vector3.y);
+            return new Vector3(vector3.x, vector3.z, vector3.y);
         }
-        
+
         /// Use this conversion when translating local rotations from Unity to ROS Forward-Left-Up body frames.
+        /// Same permutation as the Vector3 overload, negated for the handedness flip (see note above).
         public static Quaternion Unity2Body(this Quaternion quaternion)
         {
-            return new Quaternion(-quaternion.z, quaternion.x, -quaternion.y, quaternion.w);
+            return new Quaternion(-quaternion.x, -quaternion.z, -quaternion.y, quaternion.w);
         }
     }
 

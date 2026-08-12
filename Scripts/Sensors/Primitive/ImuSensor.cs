@@ -65,8 +65,19 @@ namespace Marus.Sensors.Primitive
 
         new void UpdateVehicle()
         {
+            // base.UpdateVehicle() regenerates frameId from the vehicle/object names.
+            // Only call it from the editor Reset() path — never at runtime.
             base.UpdateVehicle();
+            ResolveRigidbody();
+        }
 
+        /// <summary>
+        /// Resolves the vehicle Rigidbody without touching frameId, so a frameId
+        /// set in the Inspector survives Play mode. Splitting this out of
+        /// UpdateVehicle() is what keeps Start() from overwriting the frame name.
+        /// </summary>
+        void ResolveRigidbody()
+        {
             var veh = vehicle;
             veh_rb = veh.GetComponent<Rigidbody>();
 
@@ -79,7 +90,8 @@ namespace Marus.Sensors.Primitive
 
         void Start()
         {
-            UpdateVehicle();
+            // Runtime needs the Rigidbody, but must NOT regenerate frameId.
+            ResolveRigidbody();
         }
 
         protected override void SampleSensor()
