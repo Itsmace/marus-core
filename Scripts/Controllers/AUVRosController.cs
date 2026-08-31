@@ -32,6 +32,14 @@ namespace Marus.Actuators
     {
         public ThrusterController thrusterController;
 
+        /// <summary>
+        /// Topic carrying normalised PWM per thruster, appended to the vehicle
+        /// address. Renamed from "pwm_out": PWM is simulation only, the real
+        /// thrusters take eRPM over CAN. Must match `output_message_type: pwm`
+        /// in thrust_allocation, which publishes /sc2/thruster_pwm.
+        /// </summary>
+        public string thrusterPwmTopic = "thruster_pwm";
+
         Transform _targetTransform;
         Thread _handleStreamThread;
         ServerStreamer<ForceResponse> _streamer;
@@ -44,7 +52,7 @@ namespace Marus.Actuators
             var client = RosConnection.Instance.GetClient<RemoteControlClient>();
             var address = Helpers.GetVehicle(transform)?.name ?? name;
             _streamer.StartStream(client.ApplyForce(
-                new ForceRequest { Address = $"{address}/pwm_out" },
+                new ForceRequest { Address = $"{address}/{thrusterPwmTopic}" },
                 cancellationToken: RosConnection.Instance.CancellationToken)
             );
         }
